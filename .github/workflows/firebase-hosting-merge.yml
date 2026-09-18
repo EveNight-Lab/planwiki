@@ -25,6 +25,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Validate Firebase Secret
+        run: |
+          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT_EVENIGHT_CLOUD || secrets.FIREBASE_SERVICE_ACCOUNT }}" ]; then
+            echo "::error::[Firebase Secret Missing] GitHub Secrets에 FIREBASE_SERVICE_ACCOUNT_EVENIGHT_CLOUD 키가 설정되지 않았습니다."
+            echo "💡 해결 방법: https://github.com/EveNight-Lab/planwiki/settings/secrets/actions 에서 'FIREBASE_SERVICE_ACCOUNT_EVENIGHT_CLOUD' 시크릿을 등록해주세요."
+            exit 1
+          fi
+
       - name: Deploy to Firebase Hosting (live)
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
