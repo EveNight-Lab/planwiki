@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "evenight-cloud"
+  },
+  "targets": {
+    "evenight-cloud": {
+      "hosting": {
+        "planwiki": [
+          "planwiki"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
