@@ -10,12 +10,15 @@
 import { Toaster } from 'sonner'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary.tsx'
 import { AppRouter } from '@/router/AppRouter.tsx'
+import { ThemeProvider } from '@/context/ThemeContext.tsx'
 
 export default function App() {
   return (
     <ErrorBoundary>
-      <AppRouter />
-      <Toaster richColors position="top-right" />
+      <ThemeProvider>
+        <AppRouter />
+        <Toaster richColors position="top-right" />
+      </ThemeProvider>
     </ErrorBoundary>
   )
 }

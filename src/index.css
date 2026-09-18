@@ -1,11 +1,13 @@
 /**
- * @domain 레이아웃 & UI
- * @feature 테마 전환, 공통 스타일
- * @phase 출력 (Render)
- * @target 다크/라이트 스타일 화면 반영
- * @desc <html.dark> 클래스 감지 및 Tailwind 색상 재렌더링
+ * @domain 화면 스타일 & 테마
+ * @feature 다크/라이트 테마 전환 및 인쇄 스타일
+ * @phase 출력
+ * @target 화면 기본 서식 및 PDF 인쇄 서식 반영
+ * @desc 웹 화면 스타일과 PDF 인쇄 시 불필요한 버튼 숨김 서식 제공
  */
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   *,
@@ -25,3 +27,91 @@
   }
 }
 
+/* Hide scrollbar for horizontal mobile toolbars */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Markdown Typography (h1, h2, h3, p, strong) */
+.prose h1 {
+  font-size: 1.75rem !important;
+  line-height: 2.25rem !important;
+  font-weight: 800 !important;
+  margin-top: 1.75rem !important;
+  margin-bottom: 0.75rem !important;
+  padding-bottom: 0.35rem !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
+  color: #0f172a !important;
+}
+:is(.dark) .prose h1 {
+  border-bottom-color: rgba(51, 65, 85, 0.8) !important;
+  color: #ffffff !important;
+}
+
+.prose h2 {
+  font-size: 1.35rem !important;
+  line-height: 1.75rem !important;
+  font-weight: 700 !important;
+  margin-top: 1.5rem !important;
+  margin-bottom: 0.6rem !important;
+  color: #0f172a !important;
+}
+:is(.dark) .prose h2 {
+  color: #f8fafc !important;
+}
+
+.prose h3 {
+  font-size: 1.15rem !important;
+  line-height: 1.5rem !important;
+  font-weight: 700 !important;
+  margin-top: 1.25rem !important;
+  margin-bottom: 0.5rem !important;
+  color: #1e293b !important;
+}
+:is(.dark) .prose h3 {
+  color: #f1f5f9 !important;
+}
+
+.prose p {
+  margin-top: 0.75rem !important;
+  margin-bottom: 0.75rem !important;
+  line-height: 1.7 !important;
+}
+
+.prose strong, .prose b {
+  font-weight: 700 !important;
+}
+
+/* High-Quality Clean PDF Print Styles */
+@media print {
+  header,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  section {
+    break-inside: avoid;
+    box-shadow: none !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  table {
+    break-inside: avoid;
+  }
+}

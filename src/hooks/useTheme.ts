@@ -1,10 +1,10 @@
 /**
- * @domain 레이아웃 & UI
- * @feature 테마 전환
- * @phase 연산 (Compute)
- * @target 테마 상태 반전 및 영속화
- * @desc light ↔ dark 상태값 반전 및 localStorage 저장
- * @store localStorage (write: theme, read: theme)
+ * @domain 화면 스타일 & 테마
+ * @feature 다크/라이트 테마 전환
+ * @phase 저장소
+ * @target 테마 상태 반전 및 저장
+ * @store 브라우저 설정 기억 (theme)
+ * @desc 현재 테마를 브라우저에 저장하고 화면 스타일을 즉시 반전
  * @next src/index.css
  */
 import { useEffect, useState } from 'react'
