@@ -7,7 +7,7 @@
     "dev": "vite",
     "dev:admin": "node dev-admin/server.mjs",
     "dev:all": "concurrently -n \"APP,ADMIN\" -c \"cyan,magenta\" \"vite\" \"node dev-admin/server.mjs\"",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/prerender.mjs",
     "lint": "oxlint && npm run lint:arch",
     "lint:arch": "node scripts/check-architecture-annotations.mjs",
     "test": "vitest",

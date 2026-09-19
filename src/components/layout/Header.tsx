@@ -22,7 +22,10 @@ import {
   FileText,
   MoreVertical,
   X,
+  HelpCircle,
 } from 'lucide-react';
+import { Logo } from '../common/Logo';
+import { HelpGuideModal } from '../modal/HelpGuideModal';
 import type { DocNode } from '../../types/workspace';
 import { ThemeToggle } from '../ThemeToggle';
 
@@ -53,6 +56,7 @@ export const Header: React.FC<Props> = ({
   onNavigateHome,
 }) => {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   return (
     <>
@@ -65,11 +69,9 @@ export const Header: React.FC<Props> = ({
               role="button"
               tabIndex={0}
               title="홈으로 이동"
-              className="flex items-center gap-2 cursor-pointer shrink-0"
+              className="flex items-center gap-2.5 cursor-pointer shrink-0"
             >
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/20 tracking-tighter">
-                PW
-              </div>
+              <Logo size={34} />
               <div className="hidden md:block">
                 <div className="flex items-center gap-1.5">
                   <span className="font-extrabold text-base tracking-tight bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent">
@@ -186,11 +188,21 @@ export const Header: React.FC<Props> = ({
               <span>AI 패키지</span>
             </button>
 
+            {/* Help / Guide Button */}
+            <button
+              type="button"
+              onClick={() => setIsHelpModalOpen(true)}
+              title="플랜위키 사용법 및 가이드 보기"
+              className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+
             {/* Theme Toggle Button */}
             <ThemeToggle />
           </div>
 
-          {/* Mobile Right Controls: Home + Theme + More (···) */}
+          {/* Mobile Right Controls: Home + Help + Theme + More (···) */}
           <div className="flex sm:hidden items-center gap-1.5 shrink-0">
             <button
               type="button"
@@ -199,6 +211,15 @@ export const Header: React.FC<Props> = ({
               className="p-2 text-slate-700 dark:text-slate-200 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
             >
               <Home className="w-4 h-4 text-blue-500" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsHelpModalOpen(true)}
+              title="플랜위키 사용법 가이드"
+              className="p-2 text-slate-700 dark:text-slate-200 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+            >
+              <HelpCircle className="w-4 h-4 text-blue-500" />
             </button>
 
             <ThemeToggle />
@@ -339,6 +360,12 @@ export const Header: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Help & Guide Modal */}
+      <HelpGuideModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+      />
     </>
   );
 };
