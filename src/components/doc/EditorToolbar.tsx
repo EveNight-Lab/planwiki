@@ -37,6 +37,7 @@ interface Props {
   onAddTableRow: () => void;
   onAddTableCol: () => void;
   onInsertChecklist: () => void;
+  onInsertInlineSandbox?: () => void;
   onTriggerImageUpload: () => void;
   isSaved: boolean;
   showPreview: boolean;
@@ -55,6 +56,7 @@ export const EditorToolbar: React.FC<Props> = ({
   onAddTableRow,
   onAddTableCol,
   onInsertChecklist,
+  onInsertInlineSandbox,
   onTriggerImageUpload,
   isSaved,
   showPreview,
@@ -273,6 +275,19 @@ export const EditorToolbar: React.FC<Props> = ({
           <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           <span className="hidden sm:inline">강조박스</span>
         </button>
+
+        {onInsertInlineSandbox && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onInsertInlineSandbox}
+            title="본문 중간에 인라인 인터랙티브 HTML 프로토타입 삽입"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 shadow-xs transition active:scale-95 whitespace-nowrap shrink-0"
+          >
+            <Code2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="hidden sm:inline">+ 프로토타입</span>
+          </button>
+        )}
 
         <button
           type="button"

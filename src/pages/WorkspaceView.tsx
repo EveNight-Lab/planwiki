@@ -32,6 +32,7 @@ import { FloatingTocDrawer } from '../components/toc/FloatingTocDrawer';
 import { AccordionSection } from '../components/doc/AccordionSection';
 import { FocusBreadcrumb } from '../components/doc/FocusBreadcrumb';
 import { NewSectionModal } from '../components/modal/NewSectionModal';
+import { AiImportModal } from '../components/modal/AiImportModal';
 import { MarkdownViewer } from '../components/doc/MarkdownViewer';
 import { MarkdownEditor } from '../components/doc/MarkdownEditor';
 import { Sparkles, Edit3, Plus, ArrowUp, ListTree } from 'lucide-react';
@@ -97,6 +98,7 @@ export const WorkspaceView: React.FC = () => {
   });
 
   const [isEditingRoot, setIsEditingRoot] = useState(false);
+  const [isAiImportOpen, setIsAiImportOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showFloatingToc, setShowFloatingToc] = useState(false);
 
@@ -409,6 +411,62 @@ export const WorkspaceView: React.FC = () => {
     setModalState((m) => ({ ...m, isOpen: false }));
   };
 
+  // Import AI Generated Plan Nodes
+  const handleImportAiPlan = async (importedNodes: DocNode[]) => {
+    if (!importedNodes || importedNodes.length === 0) return;
+
+    // 로컬 파일 시스템에 디렉토리 및 파일 자동 저장
+    if (state.isLocal && state.rootNode.dirHandle) {
+      async function saveImportedTree(parentHandle: FileSystemDirectoryHandle, node: DocNode) {
+        try {
+          const childHandle = await createChildNode(
+            parentHandle,
+            node.name,
+            node.meta.title,
+            node.meta.order
+          );
+          if (childHandle) {
+            node.dirHandle = childHandle;
+            await writeTextFile(childHandle, 'content.md', node.content);
+            if (node.previewHtml) {
+              await writeTextFile(childHandle, 'preview.html', node.previewHtml);
+            }
+            for (const sub of node.children) {
+              await saveImportedTree(childHandle, sub);
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to save imported node to disk: ${node.name}`, err);
+        }
+      }
+
+      for (const node of importedNodes) {
+        await saveImportedTree(state.rootNode.dirHandle, node);
+      }
+    }
+
+    // 상태 업데이트: 기존 최상위 목록에 추가
+    const newChildren = [...state.rootNode.children, ...importedNodes].sort(
+      (a, b) => a.meta.order - b.meta.order
+    );
+
+    setState((s) => ({
+      ...s,
+      rootNode: {
+        ...s.rootNode,
+        children: newChildren,
+      },
+      saveStatus: 'saved',
+    }));
+
+    // 새로 가져온 노드들을 아코디언에서 펼쳐 보여줌
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      importedNodes.forEach((n) => next.add(n.id));
+      return next;
+    });
+  };
+
   // Delete section
   const handleDeleteNode = async (nodeId: string) => {
     const parent = findParentNode(state.rootNode, nodeId);
@@ -555,6 +613,7 @@ export const WorkspaceView: React.FC = () => {
         onExportZip={handleExportZip}
         onExportPdf={() => exportWorkspaceToPdf(handleToggleExpandAll)}
         onNavigateHome={() => navigate('/')}
+        onOpenAiImport={() => setIsAiImportOpen(true)}
         rootNode={state.rootNode}
       />
 
@@ -733,6 +792,14 @@ export const WorkspaceView: React.FC = () => {
         defaultOrder={modalState.defaultOrder}
         onClose={() => setModalState((m) => ({ ...m, isOpen: false }))}
         onSubmit={handleCreateSection}
+      />
+
+      {/* AI Plan Import Modal (외부 AI 기획 내용 가져오기 모달) */}
+      <AiImportModal
+        isOpen={isAiImportOpen}
+        onClose={() => setIsAiImportOpen(false)}
+        onImport={handleImportAiPlan}
+        nextOrder={state.rootNode.children.length + 1}
       />
     </div>
   );

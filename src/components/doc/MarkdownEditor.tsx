@@ -14,6 +14,7 @@ import { MarkdownViewer } from './MarkdownViewer';
 import { VisualTableEditor } from './VisualTableEditor';
 import { EditorToolbar } from './EditorToolbar';
 import { markdownToHtml, htmlToMarkdown } from '../../lib/markdownConvert';
+import { DEFAULT_INLINE_HTML_TEMPLATE } from '../../lib/markdownSegments';
 
 interface Props {
   initialContent?: string;
@@ -194,6 +195,19 @@ export const MarkdownEditor: React.FC<Props> = ({
     }
   };
 
+  const handleInsertInlineSandbox = () => {
+    const template = `\n${DEFAULT_INLINE_HTML_TEMPLATE.trim()}\n\n`;
+    if (mode === 'visual') {
+      // 비주얼 모드에서는 안전한 코드 블록 편집을 위해 마크다운 모드로 전환 후 삽입
+      handleToggleMode('markdown');
+      setTimeout(() => {
+        insertRawText(template);
+      }, 50);
+    } else {
+      insertRawText(template);
+    }
+  };
+
   const handleInsertTable = (tableMd: string) => {
     if (mode === 'visual') {
       const tableHtml = markdownToHtml(tableMd, assets);
@@ -345,6 +359,7 @@ export const MarkdownEditor: React.FC<Props> = ({
         onAddTableRow={handleAddTableRow}
         onAddTableCol={handleAddTableCol}
         onInsertChecklist={handleInsertChecklist}
+        onInsertInlineSandbox={handleInsertInlineSandbox}
         onTriggerImageUpload={() => fileInputRef.current?.click()}
         isSaved={isSaved}
         showPreview={showPreview}

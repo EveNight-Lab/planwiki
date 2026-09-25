@@ -23,9 +23,12 @@ import {
   MoreVertical,
   X,
   HelpCircle,
+  Copy,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Logo } from '../common/Logo';
 import { HelpGuideModal } from '../modal/HelpGuideModal';
+import { copyPlanWikiPromptToClipboard } from '../../lib/aiPromptTemplates';
 import type { DocNode } from '../../types/workspace';
 import { ThemeToggle } from '../ThemeToggle';
 
@@ -40,6 +43,7 @@ interface Props {
   onExportZip: () => void;
   onExportPdf: () => void;
   onNavigateHome: () => void;
+  onOpenAiImport?: () => void;
   rootNode?: DocNode;
 }
 
@@ -54,9 +58,21 @@ export const Header: React.FC<Props> = ({
   onExportZip,
   onExportPdf,
   onNavigateHome,
+  onOpenAiImport,
 }) => {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+
+  const handleCopyPrompt = async () => {
+    const success = await copyPlanWikiPromptToClipboard();
+    if (success) {
+      toast.success('AI 기획서 양식 프롬프트가 클립보드에 복사되었습니다!', {
+        description: 'ChatGPT, Claude 등 외부 AI 대화창에 붙여넣어 답변을 요청하세요.',
+      });
+    } else {
+      toast.error('클립보드 복사에 실패했습니다.');
+    }
+  };
 
   return (
     <>
@@ -176,6 +192,30 @@ export const Header: React.FC<Props> = ({
               <FileText className="w-3.5 h-3.5 text-rose-500" />
               <span>PDF 기획서</span>
             </button>
+
+            {/* Copy Prompt for External AI (기능 1) */}
+            <button
+              type="button"
+              onClick={handleCopyPrompt}
+              title="외부 AI(ChatGPT, Claude)에게 요청할 기획서 양식 프롬프트를 클립보드에 복사"
+              className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition"
+            >
+              <Copy className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="hidden xl:inline">AI 프롬프트 복사</span>
+            </button>
+
+            {/* Import AI Plan (기능 2) */}
+            {onOpenAiImport && (
+              <button
+                type="button"
+                onClick={onOpenAiImport}
+                title="외부 AI 대화방에서 나온 기획서를 문서로 즉시 가져오기"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 transition active:scale-95 shadow-xs whitespace-nowrap"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span>AI 가져오기</span>
+              </button>
+            )}
 
             {/* Export for AI / Antigravity */}
             <button
@@ -302,6 +342,44 @@ export const Header: React.FC<Props> = ({
                   <p className="text-xs opacity-75 font-normal">모든 항목을 펼쳐 깔끔한 문서로 인쇄/저장</p>
                 </div>
               </button>
+
+              {/* Copy Prompt for External AI (Mobile) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileMenu(false);
+                  handleCopyPrompt();
+                }}
+                className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold text-sm border border-slate-200 dark:border-slate-700 active:scale-[0.98] transition"
+              >
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
+                  <Copy className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <p className="font-bold">AI 기획 양식 프롬프트 복사</p>
+                  <p className="text-xs text-slate-400 font-normal">ChatGPT/Claude에 보낼 표준 지시문 복사</p>
+                </div>
+              </button>
+
+              {/* Import AI Plan (Mobile) */}
+              {onOpenAiImport && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                    onOpenAiImport();
+                  }}
+                  className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold text-sm border border-indigo-200 dark:border-indigo-800/60 active:scale-[0.98] transition"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold">외부 AI 기획 내용 가져오기</p>
+                    <p className="text-xs opacity-75 font-normal">AI 답변을 복사해 문서 단락으로 즉시 변환</p>
+                  </div>
+                </button>
+              )}
 
               {/* Export ZIP */}
               <button
