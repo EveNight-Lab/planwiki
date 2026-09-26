@@ -84,12 +84,7 @@ export function splitMarkdownIntoSegments(markdown: string): ContentSegment[] {
   return segments;
 }
 
-/**
- * 기본 인라인 HTML 프로토타입 삽입용 템플릿
- */
-export const DEFAULT_INLINE_HTML_TEMPLATE = `
-\`\`\`html:preview
-<!DOCTYPE html>
+export const DEFAULT_INLINE_HTML_CONTENT = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -106,6 +101,29 @@ export const DEFAULT_INLINE_HTML_TEMPLATE = `
     <button onclick="alert('인라인 샌드박스 동작 확인!')">테스트 버튼</button>
   </div>
 </body>
-</html>
+</html>`;
+
+/**
+ * 기본 인라인 HTML 프로토타입 삽입용 템플릿
+ */
+export const DEFAULT_INLINE_HTML_TEMPLATE = `
+\`\`\`html:preview
+${DEFAULT_INLINE_HTML_CONTENT}
 \`\`\`
 `;
+
+/**
+ * ContentSegment 배열을 다시 하나의 마크다운 텍스트로 안전하게 결합
+ */
+export function joinSegmentsToMarkdown(segments: ContentSegment[]): string {
+  return segments
+    .map((seg) => {
+      if (seg.type === 'html_preview') {
+        return `\`\`\`html:preview\n${seg.html.trim()}\n\`\`\``;
+      }
+      return seg.content.trim();
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+

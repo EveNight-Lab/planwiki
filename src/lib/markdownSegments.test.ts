@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { splitMarkdownIntoSegments } from './markdownSegments';
+import { splitMarkdownIntoSegments, joinSegmentsToMarkdown } from './markdownSegments';
 
 describe('markdownSegments 단위 테스트', () => {
   it('인라인 블록이 없는 일반 마크다운은 단일 markdown 세그먼트를 반환한다', () => {
@@ -59,5 +59,22 @@ describe('markdownSegments 단위 테스트', () => {
     expect(segments[1].type).toBe('markdown');
     expect(segments[2].type).toBe('html_preview');
     expect(segments[3].type).toBe('markdown');
+  });
+
+  it('분할된 세그먼트를 joinSegmentsToMarkdown으로 결합 시 원래 블록 형태로 온전히 보존된다', () => {
+    const md = `### 상단 설명
+
+\`\`\`html:preview
+<div class="box">버튼</div>
+\`\`\`
+
+하단 설명`;
+
+    const segments = splitMarkdownIntoSegments(md);
+    const joined = joinSegmentsToMarkdown(segments);
+
+    expect(joined).toContain('### 상단 설명');
+    expect(joined).toContain('```html:preview\n<div class="box">버튼</div>\n```');
+    expect(joined).toContain('하단 설명');
   });
 });

@@ -11,7 +11,6 @@ import { useNavigate, useSearchParams } from 'react-router';
 import type { DocNode, WorkspaceState } from '../types/workspace';
 import { SAMPLE_WORKSPACE } from '../lib/sampleWorkspace';
 import {
-  openDirectoryPicker,
   scanDirectoryNode,
   writeTextFile,
   writeAssetFile,
@@ -20,7 +19,6 @@ import {
   verifyPermission,
 } from '../lib/fileSystem/fsAccess';
 import {
-  saveLastDirectoryHandle,
   getLastDirectoryHandle,
   saveProjectRecord,
   getVirtualWorkspace,
@@ -28,6 +26,7 @@ import {
 } from '../lib/fileSystem/idbStorage';
 import { exportWorkspaceAsZip } from '../lib/exportZip';
 import { exportWorkspaceToPdf } from '../lib/exportPdf';
+import { promoteNodeInTree, demoteNodeInTree } from '../lib/treeHierarchy';
 import { Header } from '../components/layout/Header';
 import { TableOfContents } from '../components/toc/TableOfContents';
 import { FloatingTocDrawer } from '../components/toc/FloatingTocDrawer';
@@ -37,7 +36,7 @@ import { NewSectionModal } from '../components/modal/NewSectionModal';
 import { AiImportModal } from '../components/modal/AiImportModal';
 import { MarkdownViewer } from '../components/doc/MarkdownViewer';
 import { MarkdownEditor } from '../components/doc/MarkdownEditor';
-import { Sparkles, Edit3, Plus, ArrowUp, ListTree, AlertCircle } from 'lucide-react';
+import { Sparkles, Edit3, Plus, ArrowUp, ListTree, AlertCircle, X, Check } from 'lucide-react';
 
 // Pure helper: Find node in tree
 function findNode(node: DocNode, id: string): DocNode | null {
@@ -104,6 +103,31 @@ export const WorkspaceView: React.FC = () => {
   const [isAiImportOpen, setIsAiImportOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showFloatingToc, setShowFloatingToc] = useState(false);
+
+  // 표 보기 모드: wrap(자동 줄바꿈) | scroll(가로 스크롤) - 기본값 wrap
+  const [tableViewMode, setTableViewMode] = useState<'wrap' | 'scroll'>(() => {
+    try {
+      return (localStorage.getItem('plancraft_table_view_mode') as 'wrap' | 'scroll') || 'wrap';
+    } catch {
+      return 'wrap';
+    }
+  });
+
+  const handleToggleTableViewMode = () => {
+    const next = tableViewMode === 'wrap' ? 'scroll' : 'wrap';
+    setTableViewMode(next);
+    try {
+      localStorage.setItem('plancraft_table_view_mode', next);
+    } catch {
+      // localStorage 불가 환경 대응
+    }
+  };
+
+  // 루트 제목 및 태그 인라인 편집 상태
+  const [isEditingRootTitle, setIsEditingRootTitle] = useState(false);
+  const [rootTitleInput, setRootTitleInput] = useState('');
+  const [isAddingRootTag, setIsAddingRootTag] = useState(false);
+  const [newRootTagInput, setNewRootTagInput] = useState('');
 
   // Scroll listener for floating scroll-to-top button
   useEffect(() => {
@@ -210,38 +234,7 @@ export const WorkspaceView: React.FC = () => {
     }
   };
 
-  // Open directory picker
-  const handleOpenDirectory = async () => {
-    const handle = await openDirectoryPicker();
-    if (!handle) return;
 
-    setState((s) => ({ ...s, saveStatus: 'saving' }));
-    try {
-      const scanned = await scanDirectoryNode(handle, '', handle.name);
-      await saveLastDirectoryHandle(handle);
-      await saveProjectRecord(handle.name, 'local', scanned.meta.title || scanned.name);
-
-      setState({
-        name: scanned.meta.title || scanned.name,
-        rootNode: scanned,
-        isLocal: true,
-        dirHandle: handle,
-        saveStatus: 'saved',
-        focusedNodeId: null,
-      });
-
-      // Automatically open all first level sections
-      const initialOpen = new Set<string>();
-      scanned.children.forEach((c) => {
-        initialOpen.add(c.id);
-        c.children.forEach((cc) => initialOpen.add(cc.id));
-      });
-      setOpenSections(initialOpen);
-    } catch (err) {
-      console.error('Failed to scan selected directory:', err);
-      setState((s) => ({ ...s, saveStatus: 'error' }));
-    }
-  };
 
   // Toggle single section
   const handleToggleSection = (id: string) => {
@@ -481,8 +474,45 @@ export const WorkspaceView: React.FC = () => {
     setModalState((m) => ({ ...m, isOpen: false }));
   };
 
-  // Import AI Generated Plan Nodes
-  const handleImportAiPlan = async (importedNodes: DocNode[]) => {
+  // Update node meta (title, tags)
+  const handleUpdateMeta = async (
+    nodeId: string,
+    updates: { title?: string; tags?: string[] }
+  ) => {
+    const target = findNode(state.rootNode, nodeId);
+    if (!target) return;
+
+    const newMeta = {
+      ...target.meta,
+      ...(updates.title !== undefined ? { title: updates.title } : {}),
+      ...(updates.tags !== undefined ? { tags: updates.tags } : {}),
+    };
+
+    // 로컬 파일 시스템 meta.json 저장
+    if (state.isLocal && target.dirHandle) {
+      try {
+        await writeTextFile(target.dirHandle, 'meta.json', JSON.stringify(newMeta, null, 2));
+      } catch (err) {
+        console.error(`Failed to save meta.json for ${target.name}:`, err);
+      }
+    }
+
+    setState((s) => ({
+      ...s,
+      name: nodeId === s.rootNode.id && updates.title ? updates.title : s.name,
+      rootNode: updateNodeInTree(s.rootNode, nodeId, (n) => ({
+        ...n,
+        meta: newMeta,
+      })),
+      saveStatus: 'saved',
+    }));
+  };
+
+  // Import AI Generated Plan Nodes (mode: replace | append)
+  const handleImportAiPlan = async (
+    importedNodes: DocNode[],
+    mode: 'replace' | 'append' = 'replace'
+  ) => {
     if (!importedNodes || importedNodes.length === 0) return;
 
     // 로컬 파일 시스템에 디렉토리 및 파일 자동 저장
@@ -515,10 +545,13 @@ export const WorkspaceView: React.FC = () => {
       }
     }
 
-    // 상태 업데이트: 기존 최상위 목록에 추가
-    const newChildren = [...state.rootNode.children, ...importedNodes].sort(
-      (a, b) => a.meta.order - b.meta.order
-    );
+    // 상태 업데이트: replace 시 완전 대체, append 시 기존 목록에 추가
+    const newChildren =
+      mode === 'replace'
+        ? [...importedNodes].sort((a, b) => a.meta.order - b.meta.order)
+        : [...state.rootNode.children, ...importedNodes].sort(
+            (a, b) => a.meta.order - b.meta.order
+          );
 
     setState((s) => ({
       ...s,
@@ -531,7 +564,7 @@ export const WorkspaceView: React.FC = () => {
 
     // 새로 가져온 노드들을 아코디언에서 펼쳐 보여줌
     setOpenSections((prev) => {
-      const next = new Set(prev);
+      const next = mode === 'replace' ? new Set<string>() : new Set(prev);
       importedNodes.forEach((n) => next.add(n.id));
       return next;
     });
@@ -595,62 +628,33 @@ export const WorkspaceView: React.FC = () => {
 
   // Promote (outdent / 상위로 승격) or Demote (indent / 하위로 편입)
   const handleShiftNodeHierarchy = (nodeId: string, action: 'promote' | 'demote') => {
-    const parent = findParentNode(state.rootNode, nodeId);
-    const target = findNode(state.rootNode, nodeId);
-    if (!parent || !target) return;
-
     if (action === 'promote') {
-      // Cannot promote top-level sections
-      if (parent.id === state.rootNode.id) {
-        alert('이미 최상위 항목이므로 더 이상 상위로 승격할 수 없습니다.');
+      const res = promoteNodeInTree(state.rootNode, nodeId);
+      if (!res.success) {
+        alert(res.message || '상위로 승격할 수 없습니다.');
         return;
       }
-      const grandParent = findParentNode(state.rootNode, parent.id);
-      if (!grandParent) return;
-
-      // Remove from current parent
-      const newParentChildren = parent.children.filter((c) => c.id !== nodeId);
-      // Insert into grandparent after current parent
-      const grandChildren = [...grandParent.children];
-      const parentIndex = grandChildren.findIndex((c) => c.id === parent.id);
-      grandChildren.splice(parentIndex + 1, 0, target);
-
-      // Re-assign orders
-      grandChildren.forEach((c, idx) => {
-        c.meta.order = idx + 1;
-      });
-
-      setState((s) => {
-        let updated = updateNodeInTree(s.rootNode, parent.id, (p) => ({ ...p, children: newParentChildren }));
-        updated = updateNodeInTree(updated, grandParent.id, (gp) => ({ ...gp, children: grandChildren }));
-        return { ...s, rootNode: updated };
-      });
+      setState((s) => ({
+        ...s,
+        rootNode: res.root,
+        saveStatus: 'saved',
+      }));
     } else {
-      // Demote: Make target a child of its previous sibling
-      const parentChildren = [...parent.children];
-      const currentIndex = parentChildren.findIndex((c) => c.id === nodeId);
-      if (currentIndex <= 0) {
-        alert('이전 항목이 없어서 하위로 편입할 수 없습니다.');
+      const res = demoteNodeInTree(state.rootNode, nodeId);
+      if (!res.success) {
+        alert(res.message || '하위로 편입할 수 없습니다.');
         return;
       }
-      const previousSibling = parentChildren[currentIndex - 1];
-
-      // Remove from parent
-      parentChildren.splice(currentIndex, 1);
-      // Add to previous sibling
-      const newSiblingChildren = [...previousSibling.children, target];
-      newSiblingChildren.forEach((c, idx) => {
-        c.meta.order = idx + 1;
-      });
-
-      setState((s) => {
-        let updated = updateNodeInTree(s.rootNode, parent.id, (p) => ({ ...p, children: parentChildren }));
-        updated = updateNodeInTree(updated, previousSibling.id, (ps) => ({ ...ps, children: newSiblingChildren }));
-        return { ...s, rootNode: updated };
-      });
-
-      // Auto expand sibling
-      setOpenSections((prev) => new Set(prev).add(previousSibling.id));
+      setState((s) => ({
+        ...s,
+        rootNode: res.root,
+        saveStatus: 'saved',
+      }));
+      // 편입된 대상의 부모(앞선 형제)를 자동으로 펼쳐서 보여줌
+      const parent = findParentNode(res.root, nodeId);
+      if (parent) {
+        setOpenSections((prev) => new Set(prev).add(parent.id));
+      }
     }
   };
 
@@ -677,15 +681,13 @@ export const WorkspaceView: React.FC = () => {
         isLocal={state.isLocal}
         isVirtual={Boolean(virtualId)}
         saveStatus={state.saveStatus}
-        allExpanded={allExpanded}
-        onToggleExpandAll={handleToggleExpandAll}
-        onOpenDirectory={handleOpenDirectory}
-        onAddTopSection={() => handleOpenAddModal(null)}
         onExportZip={handleExportZip}
         onExportPdf={() => exportWorkspaceToPdf(handleToggleExpandAll)}
         onNavigateHome={() => navigate('/')}
         onOpenAiImport={() => setIsAiImportOpen(true)}
         rootNode={state.rootNode}
+        tableViewMode={tableViewMode}
+        onToggleTableViewMode={handleToggleTableViewMode}
       />
 
       {/* Main Container */}
@@ -734,37 +736,182 @@ export const WorkspaceView: React.FC = () => {
         {/* Root Node Header Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xs mb-6 transition-all">
           <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div>
+            <div className="flex-1 min-w-[240px]">
+              {/* 태그 목록 및 추가/삭제 */}
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <span className="whitespace-nowrap shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 break-keep">
                   {state.isLocal ? '로컬 마운트' : virtualId ? '안심 가상 저장소 (모바일/ZIP)' : '시뮬레이션 데모'}
                 </span>
-                {displayNode.meta.tags?.map((t) => (
+                {(displayNode.meta.tags || []).map((t) => (
                   <span
                     key={t}
-                    className="whitespace-nowrap shrink-0 inline-flex items-center text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2.5 py-0.5 rounded-full font-medium break-keep"
+                    className="group whitespace-nowrap shrink-0 inline-flex items-center gap-1 text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-full font-medium break-keep"
                   >
-                    #{t}
+                    <span>#{t}</span>
+                    <button
+                      type="button"
+                      title={`#${t} 태그 삭제`}
+                      onClick={() => {
+                        const updated = (displayNode.meta.tags || []).filter((tag) => tag !== t);
+                        handleUpdateMeta(displayNode.id, { tags: updated });
+                      }}
+                      className="text-slate-400 hover:text-red-500 rounded-full p-0.5 transition"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
                   </span>
                 ))}
+
+                {/* 태그 추가 버튼 및 인풋 */}
+                {isAddingRootTag ? (
+                  <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                    <span className="text-xs text-slate-400">#</span>
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="새 태그 입력"
+                      value={newRootTagInput}
+                      onChange={(e) => setNewRootTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = newRootTagInput.trim().replace(/^#/, '');
+                          if (val && !(displayNode.meta.tags || []).includes(val)) {
+                            handleUpdateMeta(displayNode.id, {
+                              tags: [...(displayNode.meta.tags || []), val],
+                            });
+                          }
+                          setNewRootTagInput('');
+                          setIsAddingRootTag(false);
+                        } else if (e.key === 'Escape') {
+                          setIsAddingRootTag(false);
+                          setNewRootTagInput('');
+                        }
+                      }}
+                      className="bg-transparent text-xs text-slate-800 dark:text-slate-200 outline-none w-20"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = newRootTagInput.trim().replace(/^#/, '');
+                        if (val && !(displayNode.meta.tags || []).includes(val)) {
+                          handleUpdateMeta(displayNode.id, {
+                            tags: [...(displayNode.meta.tags || []), val],
+                          });
+                        }
+                        setNewRootTagInput('');
+                        setIsAddingRootTag(false);
+                      }}
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-700"
+                    >
+                      <Check className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingRootTag(false);
+                        setNewRootTagInput('');
+                      }}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingRootTag(true);
+                      setNewRootTagInput('');
+                    }}
+                    className="inline-flex items-center gap-0.5 text-xs text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 px-2 py-0.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>태그</span>
+                  </button>
+                )}
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white mt-2 break-keep">
-                {displayNode.meta.title || displayNode.name}
-              </h1>
+
+              {/* 제목 텍스트 및 인라인 편집 */}
+              <div className="mt-2">
+                {isEditingRootTitle ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={rootTitleInput}
+                      onChange={(e) => setRootTitleInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const trimmed = rootTitleInput.trim();
+                          if (trimmed) {
+                            handleUpdateMeta(displayNode.id, { title: trimmed });
+                          }
+                          setIsEditingRootTitle(false);
+                        } else if (e.key === 'Escape') {
+                          setIsEditingRootTitle(false);
+                        }
+                      }}
+                      className="flex-1 text-xl sm:text-2xl font-black bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-2 py-1 rounded-xl border border-blue-400 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = rootTitleInput.trim();
+                        if (trimmed) {
+                          handleUpdateMeta(displayNode.id, { title: trimmed });
+                        }
+                        setIsEditingRootTitle(false);
+                      }}
+                      className="p-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
+                    >
+                      <Check className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingRootTitle(false)}
+                      className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="group/title inline-flex items-center gap-2">
+                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white break-keep">
+                      {displayNode.meta.title || displayNode.name}
+                    </h1>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRootTitleInput(displayNode.meta.title || displayNode.name);
+                        setIsEditingRootTitle(true);
+                      }}
+                      title="문서 제목 수정"
+                      className="opacity-0 group-hover/title:opacity-100 focus:opacity-100 p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsEditingRoot(!isEditingRoot)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                isEditingRoot
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-slate-700 dark:text-slate-200'
-              }`}
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>{isEditingRoot ? '편집 완료' : '개요 편집'}</span>
-            </button>
+            {/* 우측 도구: 본문 개요 편집 */}
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <button
+                type="button"
+                onClick={() => setIsEditingRoot(!isEditingRoot)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                  isEditingRoot
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-slate-700 dark:text-slate-200'
+                }`}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>{isEditingRoot ? '편집 완료' : '개요 편집'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Root Content */}
@@ -782,6 +929,7 @@ export const WorkspaceView: React.FC = () => {
                 content={displayNode.content}
                 assets={displayNode.assets}
                 onUpdateContent={(c) => handleUpdateContent(displayNode.id, c)}
+                tableViewMode={tableViewMode}
               />
             )}
           </div>
@@ -826,6 +974,7 @@ export const WorkspaceView: React.FC = () => {
                   openSections={openSections}
                   onToggleSection={handleToggleSection}
                   onUpdateContent={handleUpdateContent}
+                  onUpdateMeta={handleUpdateMeta}
                   onUpdatePreviewHtml={handleUpdatePreviewHtml}
                   onUploadAsset={handleUploadAsset}
                   onAddChildNode={handleOpenAddModal}
@@ -833,6 +982,7 @@ export const WorkspaceView: React.FC = () => {
                   onFocusNode={(id) => setState((s) => ({ ...s, focusedNodeId: id }))}
                   onMoveOrder={handleMoveNodeOrder}
                   onShiftHierarchy={handleShiftNodeHierarchy}
+                  tableViewMode={tableViewMode}
                 />
               ))}
 

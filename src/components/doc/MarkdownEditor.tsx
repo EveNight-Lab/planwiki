@@ -13,8 +13,8 @@ import { Save } from 'lucide-react';
 import { MarkdownViewer } from './MarkdownViewer';
 import { VisualTableEditor } from './VisualTableEditor';
 import { EditorToolbar } from './EditorToolbar';
-import { markdownToHtml, htmlToMarkdown } from '../../lib/markdownConvert';
-import { DEFAULT_INLINE_HTML_TEMPLATE } from '../../lib/markdownSegments';
+import { markdownToHtml, htmlToMarkdown, createPrototypeWidgetHtml } from '../../lib/markdownConvert';
+import { DEFAULT_INLINE_HTML_CONTENT, DEFAULT_INLINE_HTML_TEMPLATE } from '../../lib/markdownSegments';
 
 interface Props {
   initialContent?: string;
@@ -22,6 +22,7 @@ interface Props {
   onSave?: (content: string) => void;
   onUploadAsset?: (file: File) => Promise<string | null>;
   onClose?: () => void;
+  hideBottomCloseButton?: boolean;
 }
 
 export const MarkdownEditor: React.FC<Props> = ({
@@ -30,6 +31,7 @@ export const MarkdownEditor: React.FC<Props> = ({
   onSave = () => {},
   onUploadAsset,
   onClose = () => {},
+  hideBottomCloseButton = false,
 }) => {
   const [mode, setMode] = useState<'visual' | 'markdown'>('visual');
   const [markdownText, setMarkdownText] = useState(initialContent);
@@ -196,15 +198,12 @@ export const MarkdownEditor: React.FC<Props> = ({
   };
 
   const handleInsertInlineSandbox = () => {
-    const template = `\n${DEFAULT_INLINE_HTML_TEMPLATE.trim()}\n\n`;
     if (mode === 'visual') {
-      // 비주얼 모드에서는 안전한 코드 블록 편집을 위해 마크다운 모드로 전환 후 삽입
-      handleToggleMode('markdown');
-      setTimeout(() => {
-        insertRawText(template);
-      }, 50);
+      const widgetHtml = createPrototypeWidgetHtml(DEFAULT_INLINE_HTML_CONTENT);
+      document.execCommand('insertHTML', false, widgetHtml);
+      syncVisualToMarkdown();
     } else {
-      insertRawText(template);
+      insertRawText(`\n${DEFAULT_INLINE_HTML_TEMPLATE.trim()}\n\n`);
     }
   };
 
@@ -313,6 +312,8 @@ export const MarkdownEditor: React.FC<Props> = ({
 
   const handleVisualClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
+
+    // 1. Checkbox toggle
     if (target && target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox') {
       const cb = target as HTMLInputElement;
       if (cb.checked) {
@@ -321,6 +322,52 @@ export const MarkdownEditor: React.FC<Props> = ({
         cb.removeAttribute('checked');
       }
       syncVisualToMarkdown();
+      return;
+    }
+
+    // 2. Prototype widget delete
+    const deleteBtn = target.closest('.prototype-delete-btn');
+    if (deleteBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const widget = deleteBtn.closest('.prototype-embed-widget');
+      if (widget) {
+        widget.remove();
+        syncVisualToMarkdown();
+      }
+      return;
+    }
+
+    // 3. Prototype code panel toggle
+    const viewToggleBtn = target.closest('.prototype-view-toggle');
+    if (viewToggleBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const widget = viewToggleBtn.closest('.prototype-embed-widget');
+      const panel = widget?.querySelector('.prototype-code-panel');
+      if (panel) {
+        panel.classList.toggle('hidden');
+      }
+      return;
+    }
+
+    // 4. Prototype code apply
+    const codeSaveBtn = target.closest('.prototype-code-save-btn');
+    if (codeSaveBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const widget = codeSaveBtn.closest('.prototype-embed-widget');
+      const textarea = widget?.querySelector('.prototype-code-textarea') as HTMLTextAreaElement | null;
+      const iframe = widget?.querySelector('iframe') as HTMLIFrameElement | null;
+      if (widget && textarea) {
+        const newCode = textarea.value;
+        widget.setAttribute('data-prototype-code', encodeURIComponent(newCode));
+        if (iframe) {
+          iframe.srcdoc = newCode;
+        }
+        syncVisualToMarkdown();
+      }
+      return;
     }
   };
 
@@ -429,23 +476,25 @@ export const MarkdownEditor: React.FC<Props> = ({
             ? '💡 블로그 작성 모드: 글자를 드래그하여 굵게/기울임을 주거나, 표의 칸을 클릭해 바로 작성하세요.'
             : '💻 마크다운 원본 모드: 표준 GFM 마크다운 문법으로 직접 작성 중입니다.'}
         </span>
-        <div className="flex items-center gap-2 shrink-0 ml-auto order-1 sm:order-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition whitespace-nowrap shrink-0"
-          >
-            취소 / 닫기
-          </button>
-          <button
-            type="button"
-            onClick={handleSaveAndClose}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition active:scale-95 whitespace-nowrap shrink-0"
-          >
-            <Save className="w-3.5 h-3.5 shrink-0" />
-            <span className="whitespace-nowrap">저장 및 완료</span>
-          </button>
-        </div>
+        {!hideBottomCloseButton && (
+          <div className="flex items-center gap-2 shrink-0 ml-auto order-1 sm:order-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition whitespace-nowrap shrink-0"
+            >
+              취소 / 닫기
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAndClose}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition active:scale-95 whitespace-nowrap shrink-0"
+            >
+              <Save className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">저장 및 완료</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Visual Table Editor Modal */}

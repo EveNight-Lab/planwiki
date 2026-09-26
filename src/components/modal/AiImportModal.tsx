@@ -16,7 +16,6 @@ import {
   FileText,
   X,
   ArrowRight,
-  ListTree,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { copyPlanWikiPromptToClipboard } from '../../lib/aiPromptTemplates';
@@ -26,7 +25,7 @@ import type { DocNode } from '../../types/workspace';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (nodes: DocNode[]) => void;
+  onImport: (nodes: DocNode[], mode: 'replace' | 'append') => void;
   nextOrder?: number;
 }
 
@@ -38,12 +37,14 @@ export const AiImportModal: React.FC<Props> = ({
 }) => {
   const [inputText, setInputText] = useState('');
   const [copiedPrompt, setCopiedPrompt] = useState(false);
+  const [importMode, setImportMode] = useState<'replace' | 'append'>('replace');
 
   // 실시간 유효성 검사 및 파싱
+  const effectiveNextOrder = importMode === 'replace' ? 1 : nextOrder;
   const parseResult = useMemo(() => {
     if (!inputText.trim()) return null;
-    return parseAiPlanToNodes(inputText, nextOrder);
-  }, [inputText, nextOrder]);
+    return parseAiPlanToNodes(inputText, effectiveNextOrder);
+  }, [inputText, effectiveNextOrder]);
 
   if (!isOpen) return null;
 
@@ -66,10 +67,15 @@ export const AiImportModal: React.FC<Props> = ({
       return;
     }
 
-    onImport(parseResult.nodes);
-    toast.success(`${parseResult.totalNodeCount}개의 기획 단락을 성공적으로 가져왔습니다!`, {
-      description: '문서 트리에 즉시 반영되어 안전하게 저장되었습니다.',
-    });
+    onImport(parseResult.nodes, importMode);
+    toast.success(
+      importMode === 'replace'
+        ? `${parseResult.totalNodeCount}개의 기획 단락으로 새롭게 교체되었습니다!`
+        : `${parseResult.totalNodeCount}개의 기획 단락을 성공적으로 추가했습니다!`,
+      {
+        description: '문서 트리에 즉시 반영되어 안전하게 저장되었습니다.',
+      }
+    );
     setInputText('');
     onClose();
   };
@@ -210,13 +216,35 @@ export const AiImportModal: React.FC<Props> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
-          <div className="text-xs text-slate-400 flex items-center gap-1">
-            <ListTree className="w-3.5 h-3.5" />
-            <span>기존 기획서의 맨 아래에 추가됩니다</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+          {/* Import Mode Selector */}
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-slate-500 dark:text-slate-400 font-semibold">반영 방식:</span>
+            <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-700 dark:text-slate-200">
+              <input
+                type="radio"
+                name="importMode"
+                value="replace"
+                checked={importMode === 'replace'}
+                onChange={() => setImportMode('replace')}
+                className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 accent-indigo-600"
+              />
+              <span>전체 덮어쓰기 (교체)</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-600 dark:text-slate-300">
+              <input
+                type="radio"
+                name="importMode"
+                value="append"
+                checked={importMode === 'append'}
+                onChange={() => setImportMode('append')}
+                className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 accent-indigo-600"
+              />
+              <span>맨 아래에 추가</span>
+            </label>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-auto">
             <button
               type="button"
               onClick={onClose}
@@ -230,11 +258,11 @@ export const AiImportModal: React.FC<Props> = ({
               disabled={!parseResult || !parseResult.success}
               className={`flex items-center gap-1.5 px-5 py-2 text-xs font-bold rounded-xl transition shadow-md active:scale-95 ${
                 parseResult && parseResult.success
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
                   : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none'
               }`}
             >
-              <span>기획서로 가져오기</span>
+              <span>{importMode === 'replace' ? '새 기획서로 덮어쓰기' : '기획서에 추가하기'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

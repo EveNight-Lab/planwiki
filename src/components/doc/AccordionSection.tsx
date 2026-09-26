@@ -14,7 +14,7 @@ import {
   Focus,
   Plus,
   Trash2,
-  Code,
+  X,
   Tag,
   Sparkles,
   Check,
@@ -44,6 +44,8 @@ interface Props {
   onFocusNode: (nodeId: string) => void;
   onMoveOrder?: (nodeId: string, direction: 'up' | 'down') => void;
   onShiftHierarchy?: (nodeId: string, action: 'promote' | 'demote') => void;
+  onUpdateMeta?: (nodeId: string, meta: { title?: string; tags?: string[] }) => void;
+  tableViewMode?: 'wrap' | 'scroll';
 }
 
 export const AccordionSection: React.FC<Props> = ({
@@ -60,6 +62,8 @@ export const AccordionSection: React.FC<Props> = ({
   onFocusNode,
   onMoveOrder,
   onShiftHierarchy,
+  onUpdateMeta,
+  tableViewMode = 'wrap',
 }) => {
   const isOpen = openSections.has(node.id);
   const [isEditing, setIsEditing] = useState(false);
@@ -67,6 +71,45 @@ export const AccordionSection: React.FC<Props> = ({
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const structureMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  // Section title & tag editing state
+  const [tempTitle, setTempTitle] = useState(node.meta.title || node.name);
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const [newTagInput, setNewTagInput] = useState('');
+
+  // Sync tempTitle when node changes
+  useEffect(() => {
+    setTempTitle(node.meta.title || node.name);
+  }, [node.meta.title, node.name]);
+
+  const handleSaveTitle = () => {
+    const trimmed = tempTitle.trim();
+    if (trimmed && trimmed !== (node.meta.title || node.name) && onUpdateMeta) {
+      onUpdateMeta(node.id, { title: trimmed });
+    }
+  };
+
+  const handleAddTag = () => {
+    const trimmed = newTagInput.trim().replace(/^#/, '');
+    if (!trimmed) {
+      setIsAddingTag(false);
+      return;
+    }
+    const currentTags = node.meta.tags || [];
+    if (!currentTags.includes(trimmed) && onUpdateMeta) {
+      onUpdateMeta(node.id, { tags: [...currentTags, trimmed] });
+    }
+    setNewTagInput('');
+    setIsAddingTag(false);
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    const currentTags = node.meta.tags || [];
+    const updated = currentTags.filter((t) => t !== tagToRemove);
+    if (onUpdateMeta) {
+      onUpdateMeta(node.id, { tags: updated });
+    }
+  };
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -88,35 +131,14 @@ export const AccordionSection: React.FC<Props> = ({
   const headerFontSize = depth === 1 ? 'text-xl font-bold' : depth === 2 ? 'text-lg font-semibold' : 'text-base font-semibold';
   const borderColor = depth === 1 ? 'border-slate-300 dark:border-slate-700' : 'border-slate-200 dark:border-slate-800';
 
-  const handleCreatePrototype = () => {
-    const defaultProto = `<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <title>${node.meta.title || node.name} 프로토타입</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; background: #f8fafc; text-align: center; }
-    .box { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); max-width: 400px; margin: 0 auto; }
-    button { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; }
-    button:hover { background: #2563eb; }
-  </style>
-</head>
-<body>
-  <div class="box">
-    <h3>${node.meta.title || node.name}</h3>
-    <p style="color: #64748b; margin: 12px 0;">인터랙션/로직을 검증할 코드를 작성하세요.</p>
-    <button onclick="alert('동작 확인!')">테스트 실행</button>
-  </div>
-</body>
-</html>`;
-    onUpdatePreviewHtml(node.id, defaultProto);
-    if (!isOpen) onToggleSection(node.id);
-  };
+  const hasActiveMenu = showStructureMenu || showMobileMenu;
 
   return (
     <section
       id={`section-${node.id}`}
-      className={`my-4 border rounded-2xl overflow-hidden transition-all bg-white dark:bg-slate-900/90 shadow-sm ${borderColor}`}
+      className={`my-4 border rounded-2xl transition-all bg-white dark:bg-slate-900/90 shadow-sm ${borderColor} ${
+        hasActiveMenu ? 'relative z-30 overflow-visible' : 'relative overflow-hidden'
+      }`}
     >
       {/* Accordion Header */}
       <div
@@ -319,20 +341,6 @@ export const AccordionSection: React.FC<Props> = ({
                         <span>하위 세부 항목 추가</span>
                       </button>
 
-                      {!node.previewHtml && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleCreatePrototype();
-                            setShowMobileMenu(false);
-                          }}
-                          className="w-full px-3.5 py-2 text-left font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-2"
-                        >
-                          <Code className="w-4 h-4 text-amber-500" />
-                          <span>프로토타입 추가</span>
-                        </button>
-                      )}
-
                       <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" />
 
                       <button
@@ -360,7 +368,7 @@ export const AccordionSection: React.FC<Props> = ({
                   type="button"
                   onClick={() => onFocusNode(node.id)}
                   title="이 섹션을 단독 페이지 뷰로 포커스"
-                  className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                  className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
                 >
                   <Focus className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                   <span className="hidden md:inline">포커스</span>
@@ -374,24 +382,11 @@ export const AccordionSection: React.FC<Props> = ({
                     setIsEditing(true);
                   }}
                   title="이 문단 편집하기"
-                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-xs font-semibold rounded-lg text-blue-600 dark:text-blue-400 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200/60 dark:border-blue-800/60 transition shadow-xs"
+                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-xs font-semibold rounded-lg text-indigo-600 dark:text-indigo-400 bg-indigo-50/80 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 border border-indigo-200/60 dark:border-indigo-800/60 transition shadow-xs"
                 >
                   <Edit3 className="w-3 h-3" />
                   <span>편집</span>
                 </button>
-
-                {/* Add Prototype if not exists */}
-                {!node.previewHtml && (
-                  <button
-                    type="button"
-                    onClick={handleCreatePrototype}
-                    title="검증용 단일 HTML 프로토타입 추가"
-                    className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800 transition"
-                  >
-                    <Code className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">+ 프로토타입</span>
-                  </button>
-                )}
 
                 {/* Add Child Node */}
                 <button
@@ -427,19 +422,111 @@ export const AccordionSection: React.FC<Props> = ({
         <div className="p-3.5 sm:p-7 space-y-6">
           {/* Markdown Content (Viewer or Editor) */}
           {isEditing ? (
-            <MarkdownEditor
-              initialContent={node.content}
-              assets={node.assets}
-              onSave={(content) => onUpdateContent(node.id, content)}
-              onUploadAsset={(file) => onUploadAsset(node.id, file)}
-              onClose={() => setIsEditing(false)}
-            />
+            <div className="space-y-3">
+              {/* Title & Tags In-place Edit Bar in Section */}
+              <div className="p-3 sm:p-4 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 rounded-2xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <label className="text-xs font-bold text-indigo-700 dark:text-indigo-300 shrink-0">
+                    단락 제목:
+                  </label>
+                  <input
+                    type="text"
+                    value={tempTitle}
+                    onChange={(e) => setTempTitle(e.target.value)}
+                    onBlur={handleSaveTitle}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    placeholder="단락 제목 입력..."
+                    className="flex-1 px-3 py-1.5 text-sm font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+
+                {/* Section Tags Editor */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                    해시태그:
+                  </span>
+                  {(node.meta.tags || []).map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 shadow-xs"
+                    >
+                      #{tag}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(tag)}
+                        className="hover:text-red-500 transition ml-0.5"
+                        title="태그 삭제"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {isAddingTag ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={newTagInput}
+                        onChange={(e) => setNewTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddTag();
+                          } else if (e.key === 'Escape') {
+                            setIsAddingTag(false);
+                            setNewTagInput('');
+                          }
+                        }}
+                        autoFocus
+                        placeholder="새 태그 (엔터)"
+                        className="w-28 px-2.5 py-0.5 text-xs bg-white dark:bg-slate-800 border border-indigo-400 rounded-lg focus:outline-none text-slate-800 dark:text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddTag}
+                        className="px-2 py-0.5 text-xs font-semibold bg-indigo-600 text-white rounded-lg shadow-xs hover:bg-indigo-700 transition"
+                      >
+                        등록
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setIsAddingTag(false); setNewTagInput(''); }}
+                        className="px-1.5 py-0.5 text-xs text-slate-400 hover:text-slate-600 transition"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingTag(true)}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100/60 dark:hover:bg-indigo-950/60 border border-dashed border-indigo-300 dark:border-indigo-800 transition"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>태그 추가</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <MarkdownEditor
+                initialContent={node.content}
+                assets={node.assets}
+                onSave={(content) => onUpdateContent(node.id, content)}
+                onUploadAsset={(file) => onUploadAsset(node.id, file)}
+                onClose={() => setIsEditing(false)}
+              />
+            </div>
           ) : (
             <div className="bg-slate-50/40 dark:bg-slate-900/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800/60">
               <MarkdownViewer
                 content={node.content}
                 assets={node.assets}
                 onUpdateContent={(newContent) => onUpdateContent(node.id, newContent)}
+                tableViewMode={tableViewMode}
               />
             </div>
           )}
@@ -473,11 +560,8 @@ export const AccordionSection: React.FC<Props> = ({
 
           {/* Child Nodes (Recursive) */}
           {node.children && node.children.length > 0 && (
-            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">
-                하위 세부 항목 ({node.children.length})
-              </div>
-              <div className="space-y-4 pl-0 sm:pl-3 border-l-2 border-slate-200 dark:border-slate-800">
+            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="space-y-3 pl-0 sm:pl-4">
                 {node.children.map((child, idx) => (
                   <AccordionSection
                     key={child.id}
@@ -494,6 +578,8 @@ export const AccordionSection: React.FC<Props> = ({
                     onFocusNode={onFocusNode}
                     onMoveOrder={onMoveOrder}
                     onShiftHierarchy={onShiftHierarchy}
+                    onUpdateMeta={onUpdateMeta}
+                    tableViewMode={tableViewMode}
                   />
                 ))}
               </div>

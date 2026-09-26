@@ -8,7 +8,7 @@
  * @next src/components/doc/FocusBreadcrumb.tsx
  */
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, ListTree, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, ListTree } from 'lucide-react';
 import type { DocNode } from '../../types/workspace';
 
 interface Props {
@@ -95,23 +95,13 @@ export const TableOfContents: React.FC<Props> = ({ rootNode, onSelectSection }) 
               <button
                 type="button"
                 onClick={() => onSelectSection(item.id)}
-                className="text-left text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline flex items-center gap-1.5 transition-colors active:opacity-70 flex-1 min-w-0"
+                className="text-left text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline flex items-center gap-1.5 transition-colors active:opacity-70 flex-1 min-w-0"
               >
-                <span className="font-mono text-xs text-slate-500 dark:text-slate-400 font-semibold group-hover:text-blue-600 dark:group-hover:text-blue-400 shrink-0">
+                <span className="font-mono text-xs text-slate-500 dark:text-slate-400 font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 shrink-0">
                   {item.numbering}.
                 </span>
-                <span className="font-medium truncate">{item.title}</span>
+                <span className="font-medium break-keep leading-snug">{item.title}</span>
               </button>
-
-              {item.hasPreview && (
-                <span
-                  title="검증된 HTML 프로토타입 포함"
-                  className="shrink-0 inline-flex items-center gap-0.5 text-[10px] bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded font-medium border border-amber-300/40"
-                >
-                  <Sparkles className="w-2.5 h-2.5" />
-                  <span>샌드박스</span>
-                </span>
-              )}
             </li>
           ))}
         </ul>

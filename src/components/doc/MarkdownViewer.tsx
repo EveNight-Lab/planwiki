@@ -14,6 +14,7 @@ interface Props {
   content: string;
   assets: Record<string, string>;
   onUpdateContent?: (newContent: string) => void;
+  tableViewMode?: 'wrap' | 'scroll';
 }
 
 // Pure helper: Toggle the N-th task checkbox in markdown text
@@ -52,7 +53,7 @@ function renderMarkdownHtml(mdText: string, assets: Record<string, string>): str
       const cleaned = match
         .replace(/\s*disabled(?:=["'][^"']*["'])?/gi, '')
         .replace(/class=["'][^"']*["']/gi, '');
-      return `<input type="checkbox" data-task-index="${idx}" class="task-checkbox cursor-pointer w-4 h-4 rounded accent-blue-600 align-middle mr-1.5 transition-transform active:scale-90" ${cleaned.slice(6)}`;
+      return `<input type="checkbox" data-task-index="${idx}" class="task-checkbox cursor-pointer w-4 h-4 rounded accent-indigo-600 align-middle mr-1.5 transition-transform active:scale-90" ${cleaned.slice(6)}`;
     });
   } catch (err) {
     console.error('Markdown parse error:', err);
@@ -60,7 +61,12 @@ function renderMarkdownHtml(mdText: string, assets: Record<string, string>): str
   }
 }
 
-export const MarkdownViewer: React.FC<Props> = ({ content, assets, onUpdateContent }) => {
+export const MarkdownViewer: React.FC<Props> = ({
+  content,
+  assets,
+  onUpdateContent,
+  tableViewMode = 'wrap',
+}) => {
   const segments: ContentSegment[] = useMemo(() => {
     if (!content) return [];
     return splitMarkdownIntoSegments(content);
@@ -86,19 +92,26 @@ export const MarkdownViewer: React.FC<Props> = ({ content, assets, onUpdateConte
     );
   }
 
+  const tableStyles =
+    tableViewMode === 'wrap'
+      ? `[&_table]:table [&_table]:w-full [&_table]:overflow-visible [&_table]:border-collapse [&_table]:my-4 [&_table]:text-xs sm:[&_table]:text-sm
+         [&_th]:bg-slate-100 dark:[&_th]:bg-slate-800 [&_th]:border [&_th]:border-slate-300 dark:[&_th]:border-slate-700 [&_th]:p-2 sm:[&_th]:p-2.5 [&_th]:text-left [&_th]:font-semibold [&_th]:whitespace-normal [&_th]:break-words
+         [&_td]:border [&_td]:border-slate-200 dark:[&_td]:border-slate-800 [&_td]:p-2 sm:[&_td]:p-2.5 [&_td]:whitespace-normal [&_td]:break-words`
+      : `[&_table]:block [&_table]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-4 [&_table]:text-xs sm:[&_table]:text-sm [&_table]:scrollbar-thin
+         [&_th]:bg-slate-100 dark:[&_th]:bg-slate-800 [&_th]:border [&_th]:border-slate-300 dark:[&_th]:border-slate-700 [&_th]:p-2 sm:[&_th]:p-2.5 [&_th]:text-left [&_th]:font-semibold [&_th]:whitespace-nowrap
+         [&_td]:border [&_td]:border-slate-200 dark:[&_td]:border-slate-800 [&_td]:p-2 sm:[&_td]:p-2.5 [&_td]:whitespace-nowrap`;
+
   const proseClasses = `prose prose-slate dark:prose-invert max-w-none text-slate-800 dark:text-slate-200
     [&_h1]:text-2xl sm:[&_h1]:text-3xl [&_h1]:font-black [&_h1]:text-slate-900 dark:[&_h1]:text-white [&_h1]:mt-7 [&_h1]:mb-3.5 [&_h1]:pb-2 [&_h1]:border-b [&_h1]:border-slate-200 dark:[&_h1]:border-slate-800
     [&_h2]:text-xl sm:[&_h2]:text-2xl [&_h2]:font-extrabold [&_h2]:text-slate-900 dark:[&_h2]:text-white [&_h2]:mt-6 [&_h2]:mb-3
     [&_h3]:text-lg sm:[&_h3]:text-xl [&_h3]:font-bold [&_h3]:text-slate-800 dark:[&_h3]:text-slate-100 [&_h3]:mt-5 [&_h3]:mb-2.5
     [&_p]:my-3 [&_p]:leading-relaxed
     [&_strong]:font-bold [&_strong]:text-slate-900 dark:[&_strong]:text-white
-    [&_table]:block [&_table]:overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:my-4 [&_table]:text-xs sm:[&_table]:text-sm [&_table]:scrollbar-thin
-    [&_th]:bg-slate-100 dark:[&_th]:bg-slate-800 [&_th]:border [&_th]:border-slate-300 dark:[&_th]:border-slate-700 [&_th]:p-2 sm:[&_th]:p-2.5 [&_th]:text-left [&_th]:font-semibold [&_th]:whitespace-nowrap sm:[&_th]:whitespace-normal
-    [&_td]:border [&_td]:border-slate-200 dark:[&_td]:border-slate-800 [&_td]:p-2 sm:[&_td]:p-2.5 [&_td]:whitespace-nowrap sm:[&_td]:whitespace-normal
+    ${tableStyles}
     [&_tr:nth-child(even)]:bg-slate-50/60 dark:[&_tr:nth-child(even)]:bg-slate-800/40
-    [&_blockquote]:border-l-4 [&_blockquote]:border-blue-500 [&_blockquote]:bg-blue-50/50 dark:[&_blockquote]:bg-blue-950/20 [&_blockquote]:py-2 [&_blockquote]:px-3 sm:[&_blockquote]:px-4 [&_blockquote]:rounded-r-lg
+    [&_blockquote]:border-l-4 [&_blockquote]:border-indigo-500 [&_blockquote]:bg-indigo-50/50 dark:[&_blockquote]:bg-indigo-950/20 [&_blockquote]:py-2 [&_blockquote]:px-3 sm:[&_blockquote]:px-4 [&_blockquote]:rounded-r-lg
     [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:p-3 sm:[&_pre]:p-4 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_pre]:text-xs sm:[&_pre]:text-sm
-    [&_code]:bg-slate-100 dark:[&_code]:bg-slate-800 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-blue-600 dark:[&_code]:text-blue-400 [&_code]:text-xs [&_code]:font-mono
+    [&_code]:bg-slate-100 dark:[&_code]:bg-slate-800 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-indigo-600 dark:[&_code]:text-indigo-400 [&_code]:text-xs [&_code]:font-mono
     [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-inherit
     [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5
     [&_li:has(input:checked)]:line-through [&_li:has(input:checked)]:opacity-60 [&_li:has(input:checked)]:text-slate-400

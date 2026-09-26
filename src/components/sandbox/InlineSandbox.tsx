@@ -7,23 +7,35 @@
  */
 
 import React, { useState } from 'react';
-import { Sparkles, RefreshCw, Code, Smartphone, Monitor } from 'lucide-react';
+import { Sparkles, RefreshCw, Code, Smartphone, Monitor, Trash2, Check, X } from 'lucide-react';
 
 interface Props {
   htmlCode: string;
   title?: string;
+  onUpdateHtmlCode?: (newHtml: string) => void;
+  onDelete?: () => void;
 }
 
 export const InlineSandbox: React.FC<Props> = ({
   htmlCode,
   title = '인라인 프로토타입',
+  onUpdateHtmlCode,
+  onDelete,
 }) => {
   const [reloadKey, setReloadKey] = useState(0);
   const [showSource, setShowSource] = useState(false);
   const [viewportMode, setViewportMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [editableCode, setEditableCode] = useState(htmlCode);
 
   const handleReload = () => {
     setReloadKey((prev) => prev + 1);
+  };
+
+  const handleApplyCode = () => {
+    if (onUpdateHtmlCode) {
+      onUpdateHtmlCode(editableCode);
+    }
+    handleReload();
   };
 
   return (
@@ -58,15 +70,21 @@ export const InlineSandbox: React.FC<Props> = ({
           {/* Source code toggle */}
           <button
             type="button"
-            onClick={() => setShowSource(!showSource)}
-            title={showSource ? '소스 코드 숨기기' : '소스 코드 보기'}
-            className={`p-1 rounded transition ${
+            onClick={() => {
+              if (!showSource) {
+                setEditableCode(htmlCode);
+              }
+              setShowSource(!showSource);
+            }}
+            title={showSource ? '코드 패널 닫기' : '코드 보기 / 편집'}
+            className={`flex items-center gap-1 px-1.5 py-1 rounded transition text-xs font-semibold ${
               showSource
                 ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400'
                 : 'hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
             <Code className="w-3.5 h-3.5" />
+            <span className="text-[11px]">{onUpdateHtmlCode ? '코드 편집' : '코드'}</span>
           </button>
 
           {/* Reload iframe */}
@@ -78,13 +96,66 @@ export const InlineSandbox: React.FC<Props> = ({
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
+
+          {/* Delete prototype if onDelete provided */}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('이 프로토타입 블록을 삭제하시겠습니까?')) {
+                  onDelete();
+                }
+              }}
+              title="프로토타입 블록 삭제"
+              className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Source Code View (Optional collapse) */}
+      {/* Source Code View / Inline Editor */}
       {showSource && (
-        <div className="p-3 bg-slate-950 text-slate-200 border-b border-slate-800 text-xs font-mono overflow-x-auto max-h-60 scrollbar-thin">
-          <pre className="m-0 leading-relaxed">{htmlCode}</pre>
+        <div className="bg-slate-950 text-slate-200 border-b border-slate-800 text-xs font-mono">
+          {onUpdateHtmlCode ? (
+            <div className="p-3">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-slate-400 text-[11px]">
+                <span>HTML/CSS/JS 코드 직접 편집</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleApplyCode}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-sans font-bold text-xs transition"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>적용</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditableCode(htmlCode);
+                      setShowSource(false);
+                    }}
+                    className="p-1 text-slate-400 hover:text-slate-200"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              <textarea
+                value={editableCode}
+                onChange={(e) => setEditableCode(e.target.value)}
+                rows={10}
+                className="w-full bg-slate-900 text-slate-100 font-mono text-xs p-2.5 rounded-lg border border-slate-800 outline-none focus:border-blue-500 resize-y"
+                placeholder="<!DOCTYPE html>..."
+              />
+            </div>
+          ) : (
+            <div className="p-3 overflow-x-auto max-h-60 scrollbar-thin">
+              <pre className="m-0 leading-relaxed">{htmlCode}</pre>
+            </div>
+          )}
         </div>
       )}
 

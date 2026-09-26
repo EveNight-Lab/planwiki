@@ -7,7 +7,7 @@
  * @next src/pages/WorkspaceView.tsx
  */
 import React, { useEffect, useRef } from 'react';
-import { X, ListTree, Sparkles } from 'lucide-react';
+import { X, ListTree } from 'lucide-react';
 import type { DocNode } from '../../types/workspace';
 
 interface Props {
@@ -123,21 +123,14 @@ export const FloatingTocDrawer: React.FC<Props> = ({
                   }}
                   className="w-full text-left py-2 px-2.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/40 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 flex items-center justify-between gap-2 transition group"
                 >
-                  <div className="flex items-center gap-2 truncate">
-                    <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 shrink-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 shrink-0">
                       {item.numbering}.
                     </span>
-                    <span className="text-xs sm:text-sm font-medium truncate group-hover:underline">
+                    <span className="text-xs sm:text-sm font-medium break-keep leading-snug group-hover:underline">
                       {item.title}
                     </span>
                   </div>
-
-                  {item.hasPreview && (
-                    <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded font-medium border border-amber-300/40">
-                      <Sparkles className="w-2.5 h-2.5" />
-                      <span>프로토타입</span>
-                    </span>
-                  )}
                 </button>
               </div>
             ))
