@@ -23,6 +23,7 @@ import {
   CornerLeftUp,
   CornerRightDown,
   ArrowUpDown,
+  MoreHorizontal,
 } from 'lucide-react';
 import type { DocNode } from '../../types/workspace';
 import { MarkdownViewer } from './MarkdownViewer';
@@ -63,7 +64,9 @@ export const AccordionSection: React.FC<Props> = ({
   const isOpen = openSections.has(node.id);
   const [isEditing, setIsEditing] = useState(false);
   const [showStructureMenu, setShowStructureMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const structureMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -71,12 +74,15 @@ export const AccordionSection: React.FC<Props> = ({
       if (structureMenuRef.current && !structureMenuRef.current.contains(e.target as Node)) {
         setShowStructureMenu(false);
       }
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
+        setShowMobileMenu(false);
+      }
     };
-    if (showStructureMenu) {
+    if (showStructureMenu || showMobileMenu) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showStructureMenu]);
+  }, [showStructureMenu, showMobileMenu]);
 
   // Depth styling
   const headerFontSize = depth === 1 ? 'text-xl font-bold' : depth === 2 ? 'text-lg font-semibold' : 'text-base font-semibold';
@@ -134,7 +140,7 @@ export const AccordionSection: React.FC<Props> = ({
             {numbering}.
           </span>
 
-          <h3 className={`${headerFontSize} text-slate-800 dark:text-slate-100 truncate`}>
+          <h3 className={`${headerFontSize} text-slate-800 dark:text-slate-100 min-w-0 flex-1 break-keep leading-snug`}>
             {node.meta.title || node.name}
           </h3>
 
@@ -168,18 +174,18 @@ export const AccordionSection: React.FC<Props> = ({
           onClick={(e) => e.stopPropagation()}
         >
           {isEditing ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               {/* Structure Control Dropdown Menu (순서 및 계층 변경 드롭다운) */}
               <div className="relative shrink-0" ref={structureMenuRef}>
                 <button
                   type="button"
                   onClick={() => setShowStructureMenu(!showStructureMenu)}
                   title="목차 순서 및 계층 위치 변경"
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 shadow-xs transition active:scale-95 whitespace-nowrap"
+                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 shadow-xs transition active:scale-95 whitespace-nowrap"
                 >
                   <ArrowUpDown className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                  <span>위치/순서</span>
-                  <ChevronDown className="w-3 h-3 text-slate-400 shrink-0 ml-0.5" />
+                  <span className="hidden sm:inline">위치/순서</span>
+                  <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
                 </button>
 
                 {showStructureMenu && (
@@ -248,13 +254,13 @@ export const AccordionSection: React.FC<Props> = ({
                 )}
               </div>
 
-              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
+              <span className="hidden sm:inline-block text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
                 편집 중
               </span>
               <button
                 type="button"
                 onClick={() => setIsEditing(false)}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition"
+                className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>완료</span>
@@ -262,67 +268,155 @@ export const AccordionSection: React.FC<Props> = ({
             </div>
           ) : (
             <>
-              {/* Focus Mode Button */}
-              <button
-                type="button"
-                onClick={() => onFocusNode(node.id)}
-                title="이 섹션을 단독 페이지 뷰로 포커스"
-                className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
-              >
-                <Focus className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                <span className="hidden md:inline">포커스</span>
-              </button>
-
-              {/* Edit Markdown Toggle (NamuWiki style [편집]) */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isOpen) onToggleSection(node.id);
-                  setIsEditing(true);
-                }}
-                title="이 문단 편집하기"
-                className="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-xs font-semibold rounded-lg text-blue-600 dark:text-blue-400 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200/60 dark:border-blue-800/60 transition shadow-xs"
-              >
-                <Edit3 className="w-3 h-3" />
-                <span>편집</span>
-              </button>
-
-              {/* Add Prototype if not exists */}
-              {!node.previewHtml && (
+              {/* 1. 모바일 액션 뷰 (sm:hidden) - 제목 공간 확보를 위해 [편집] + [··· 더보기]로 압축 */}
+              <div className="flex sm:hidden items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={handleCreatePrototype}
-                  title="검증용 단일 HTML 프로토타입 추가"
-                  className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800 transition"
+                  onClick={() => {
+                    if (!isOpen) onToggleSection(node.id);
+                    setIsEditing(true);
+                  }}
+                  title="이 문단 편집하기"
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg text-blue-600 dark:text-blue-400 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200/60 dark:border-blue-800/60 transition shadow-xs shrink-0"
                 >
-                  <Code className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">+ 프로토타입</span>
+                  <Edit3 className="w-3 h-3" />
+                  <span>편집</span>
                 </button>
-              )}
 
-              {/* Add Child Node */}
-              <button
-                type="button"
-                onClick={() => onAddChildNode(node.id)}
-                title="하위 세부 항목(폴더) 추가"
-                className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg transition"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
+                <div className="relative shrink-0" ref={mobileMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowMobileMenu(!showMobileMenu)}
+                    title="단락 관리 메뉴"
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
 
-              {/* Delete Node */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm(`'${node.meta.title || node.name}' 항목과 모든 하위 내용을 삭제하시겠습니까?`)) {
-                    onDeleteNode(node.id);
-                  }
-                }}
-                title="섹션 삭제"
-                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+                  {showMobileMenu && (
+                    <div className="absolute top-full right-0 mt-1.5 w-44 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl z-50 py-1.5 overflow-hidden animate-fadeIn text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onFocusNode(node.id);
+                          setShowMobileMenu(false);
+                        }}
+                        className="w-full px-3.5 py-2 text-left font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
+                      >
+                        <Focus className="w-4 h-4 text-slate-400" />
+                        <span>단독 포커스 보기</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onAddChildNode(node.id);
+                          setShowMobileMenu(false);
+                        }}
+                        className="w-full px-3.5 py-2 text-left font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>하위 세부 항목 추가</span>
+                      </button>
+
+                      {!node.previewHtml && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleCreatePrototype();
+                            setShowMobileMenu(false);
+                          }}
+                          className="w-full px-3.5 py-2 text-left font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-2"
+                        >
+                          <Code className="w-4 h-4 text-amber-500" />
+                          <span>프로토타입 추가</span>
+                        </button>
+                      )}
+
+                      <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowMobileMenu(false);
+                          if (confirm(`'${node.meta.title || node.name}' 항목과 모든 하위 내용을 삭제하시겠습니까?`)) {
+                            onDeleteNode(node.id);
+                          }
+                        }}
+                        className="w-full px-3.5 py-2 text-left font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                        <span>섹션 삭제</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. 데스크톱 액션 뷰 (hidden sm:flex) - 넉넉한 화면에서 편리하게 직접 노출 */}
+              <div className="hidden sm:flex items-center gap-1">
+                {/* Focus Mode Button */}
+                <button
+                  type="button"
+                  onClick={() => onFocusNode(node.id)}
+                  title="이 섹션을 단독 페이지 뷰로 포커스"
+                  className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                >
+                  <Focus className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                  <span className="hidden md:inline">포커스</span>
+                </button>
+
+                {/* Edit Markdown Toggle (NamuWiki style [편집]) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isOpen) onToggleSection(node.id);
+                    setIsEditing(true);
+                  }}
+                  title="이 문단 편집하기"
+                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-xs font-semibold rounded-lg text-blue-600 dark:text-blue-400 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200/60 dark:border-blue-800/60 transition shadow-xs"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  <span>편집</span>
+                </button>
+
+                {/* Add Prototype if not exists */}
+                {!node.previewHtml && (
+                  <button
+                    type="button"
+                    onClick={handleCreatePrototype}
+                    title="검증용 단일 HTML 프로토타입 추가"
+                    className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800 transition"
+                  >
+                    <Code className="w-3.5 h-3.5" />
+                    <span className="hidden md:inline">+ 프로토타입</span>
+                  </button>
+                )}
+
+                {/* Add Child Node */}
+                <button
+                  type="button"
+                  onClick={() => onAddChildNode(node.id)}
+                  title="하위 세부 항목(폴더) 추가"
+                  className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg transition"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+
+                {/* Delete Node */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`'${node.meta.title || node.name}' 항목과 모든 하위 내용을 삭제하시겠습니까?`)) {
+                      onDeleteNode(node.id);
+                    }
+                  }}
+                  title="섹션 삭제"
+                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </>
           )}
         </div>

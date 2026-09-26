@@ -111,7 +111,7 @@ export const AiImportModal: React.FC<Props> = ({
                 <span>AI에게 전달할 양식 프롬프트</span>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                기획 대화방에 붙여넣을 <strong>표준 규격 지시문(인라인 HTML 예시 포함)</strong>을 복사합니다.
+                기획 대화방에 붙여넣을 <strong>표준 규격 지시문(세부 단락 및 모바일 표 가이드)</strong>을 복사합니다.
               </p>
             </div>
             <button
