@@ -24,6 +24,7 @@ import {
   X,
   HelpCircle,
   Copy,
+  Archive,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Logo } from '../common/Logo';
@@ -35,6 +36,7 @@ import { ThemeToggle } from '../ThemeToggle';
 interface Props {
   workspaceName: string;
   isLocal: boolean;
+  isVirtual?: boolean;
   saveStatus: 'saved' | 'saving' | 'error';
   allExpanded: boolean;
   onToggleExpandAll: () => void;
@@ -50,6 +52,7 @@ interface Props {
 export const Header: React.FC<Props> = ({
   workspaceName,
   isLocal,
+  isVirtual = false,
   saveStatus,
   allExpanded,
   onToggleExpandAll,
@@ -107,7 +110,9 @@ export const Header: React.FC<Props> = ({
             <div className="flex items-center gap-1.5 min-w-0">
               <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 max-w-[130px] sm:max-w-[200px] md:max-w-[240px]">
                 {isLocal ? (
-                  <HardDrive className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <HardDrive className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                ) : isVirtual ? (
+                  <Archive className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                 ) : (
                   <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                 )}
@@ -115,7 +120,7 @@ export const Header: React.FC<Props> = ({
                   {workspaceName}
                 </span>
                 <span className="text-[10px] text-slate-400 shrink-0 hidden xs:inline">
-                  {isLocal ? '(로컬)' : '(데모)'}
+                  {isLocal ? '(로컬)' : isVirtual ? '(안심저장소)' : '(데모)'}
                 </span>
               </div>
 

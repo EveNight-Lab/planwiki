@@ -23,6 +23,8 @@ import {
   saveLastDirectoryHandle,
   getLastDirectoryHandle,
   saveProjectRecord,
+  getVirtualWorkspace,
+  saveVirtualWorkspace,
 } from '../lib/fileSystem/idbStorage';
 import { exportWorkspaceAsZip } from '../lib/exportZip';
 import { exportWorkspaceToPdf } from '../lib/exportPdf';
@@ -35,7 +37,7 @@ import { NewSectionModal } from '../components/modal/NewSectionModal';
 import { AiImportModal } from '../components/modal/AiImportModal';
 import { MarkdownViewer } from '../components/doc/MarkdownViewer';
 import { MarkdownEditor } from '../components/doc/MarkdownEditor';
-import { Sparkles, Edit3, Plus, ArrowUp, ListTree } from 'lucide-react';
+import { Sparkles, Edit3, Plus, ArrowUp, ListTree, AlertCircle } from 'lucide-react';
 
 // Pure helper: Find node in tree
 function findNode(node: DocNode, id: string): DocNode | null {
@@ -72,6 +74,7 @@ export const WorkspaceView: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isSampleMode = searchParams.get('mode') === 'sample';
+  const virtualId = searchParams.get('virtualId');
 
   const [state, setState] = useState<WorkspaceState>({
     name: SAMPLE_WORKSPACE.meta.title || SAMPLE_WORKSPACE.name,
@@ -111,10 +114,48 @@ export const WorkspaceView: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const [pendingPermissionHandle, setPendingPermissionHandle] = useState<FileSystemDirectoryHandle | null>(null);
+
+  // Auto-sync virtual workspace to IndexedDB
+  useEffect(() => {
+    if (!virtualId || isSampleMode) return;
+    const timer = setTimeout(() => {
+      saveVirtualWorkspace(virtualId, state.rootNode);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [virtualId, state.rootNode, isSampleMode]);
+
   // Restore directory handle on mount if not explicitly sample mode
   useEffect(() => {
     if (isSampleMode) return;
 
+    // 1. If virtual workspace mode
+    if (virtualId) {
+      const activeVirtualId = virtualId;
+      async function loadVirtual() {
+        const root = await getVirtualWorkspace(activeVirtualId);
+        if (root) {
+          setState({
+            name: root.meta.title || root.name,
+            rootNode: root,
+            isLocal: false,
+            saveStatus: 'saved',
+            focusedNodeId: null,
+          });
+          const initialOpen = new Set<string>();
+          root.children.forEach((c) => {
+            initialOpen.add(c.id);
+            c.children.forEach((cc) => initialOpen.add(cc.id));
+          });
+          setOpenSections(initialOpen);
+          await saveProjectRecord(root.name, 'virtual', root.meta.title || root.name);
+        }
+      }
+      loadVirtual();
+      return;
+    }
+
+    // 2. Physical directory handle mode
     async function restoreHandle() {
       const handle = await getLastDirectoryHandle();
       if (handle) {
@@ -134,11 +175,40 @@ export const WorkspaceView: React.FC = () => {
           } catch (err) {
             console.warn('Could not restore last workspace directory', err);
           }
+        } else {
+          // Permission needed from user gesture
+          setPendingPermissionHandle(handle);
         }
       }
     }
     restoreHandle();
-  }, [isSampleMode]);
+  }, [isSampleMode, virtualId]);
+
+  // Activate permission with user gesture
+  const handleActivatePermission = async () => {
+    if (!pendingPermissionHandle) return;
+    const hasPerm = await verifyPermission(pendingPermissionHandle, true);
+    if (hasPerm) {
+      try {
+        const scanned = await scanDirectoryNode(pendingPermissionHandle, '', pendingPermissionHandle.name);
+        setState({
+          name: scanned.meta.title || scanned.name,
+          rootNode: scanned,
+          isLocal: true,
+          dirHandle: pendingPermissionHandle,
+          saveStatus: 'saved',
+          focusedNodeId: null,
+        });
+        await saveProjectRecord(pendingPermissionHandle.name, 'local', scanned.meta.title || scanned.name);
+        setPendingPermissionHandle(null);
+      } catch (err) {
+        console.error('Failed to load directory after permission grant:', err);
+        alert('폴더를 불러오는 중 오류가 발생했습니다.');
+      }
+    } else {
+      alert('폴더 접근 권한이 거부되었습니다. 브라우저 설정에서 권한을 허용해주세요.');
+    }
+  };
 
   // Open directory picker
   const handleOpenDirectory = async () => {
@@ -605,6 +675,7 @@ export const WorkspaceView: React.FC = () => {
       <Header
         workspaceName={state.name}
         isLocal={state.isLocal}
+        isVirtual={Boolean(virtualId)}
         saveStatus={state.saveStatus}
         allExpanded={allExpanded}
         onToggleExpandAll={handleToggleExpandAll}
@@ -619,6 +690,37 @@ export const WorkspaceView: React.FC = () => {
 
       {/* Main Container */}
       <main className="max-w-4xl mx-auto px-3 sm:px-6 pt-4 sm:pt-8">
+        {/* Permission Request Banner for Saved Handle */}
+        {pendingPermissionHandle && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs animate-fadeIn">
+            <div className="flex items-center gap-2.5 text-amber-800 dark:text-amber-200">
+              <AlertCircle className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="font-bold">로컬 작업 폴더 접근 권한 승인 필요</p>
+                <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
+                  이전에 작업하던 <strong>&apos;{pendingPermissionHandle.name}&apos;</strong> 폴더를 계속 편집하려면 브라우저 권한을 승인해주세요.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setPendingPermissionHandle(null)}
+                className="px-3 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition"
+              >
+                닫기
+              </button>
+              <button
+                type="button"
+                onClick={handleActivatePermission}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-xs transition active:scale-95 shrink-0"
+              >
+                권한 허용 및 열기
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Focus Mode Breadcrumb */}
         {state.focusedNodeId && (
           <FocusBreadcrumb
@@ -633,20 +735,20 @@ export const WorkspaceView: React.FC = () => {
         <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xs mb-6 transition-all">
           <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
-                  {state.isLocal ? '로컬 마운트' : '시뮬레이션 데모'}
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="whitespace-nowrap shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 break-keep">
+                  {state.isLocal ? '로컬 마운트' : virtualId ? '안심 가상 저장소 (모바일/ZIP)' : '시뮬레이션 데모'}
                 </span>
                 {displayNode.meta.tags?.map((t) => (
                   <span
                     key={t}
-                    className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded-full"
+                    className="whitespace-nowrap shrink-0 inline-flex items-center text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2.5 py-0.5 rounded-full font-medium break-keep"
                   >
                     #{t}
                   </span>
                 ))}
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white mt-2">
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white mt-2 break-keep">
                 {displayNode.meta.title || displayNode.name}
               </h1>
             </div>

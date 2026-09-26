@@ -8,7 +8,7 @@
  * @desc 최근 작업한 프로젝트 목록을 한 화면에 보여주고 검색 및 빠른 열기를 제공하는 대시보드
  * @next src/pages/WorkspaceView.tsx
  */
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import {
   FolderOpen,
@@ -24,6 +24,7 @@ import {
   Columns2,
   List,
   HelpCircle,
+  Archive,
 } from 'lucide-react';
 import { openDirectoryPicker, scanDirectoryNode } from '../lib/fileSystem/fsAccess';
 import {
@@ -31,8 +32,11 @@ import {
   saveProjectRecord,
   getProjectRecords,
   removeProjectRecord,
+  getVirtualWorkspace,
   type ProjectRecord,
 } from '../lib/fileSystem/idbStorage';
+import { importWorkspaceFromZip } from '../lib/importZip';
+import { exportWorkspaceAsZip } from '../lib/exportZip';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { CreateProjectModal } from '../components/modal/CreateProjectModal';
 import { HelpGuideModal } from '../components/modal/HelpGuideModal';
@@ -48,6 +52,7 @@ export const ProjectHubPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const zipInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -84,27 +89,87 @@ export const ProjectHubPage: React.FC = () => {
     }
   };
 
-  // 2. Created New Project Workspace
+  // 2. Created New Project Workspace (Local or Virtual)
   const handleProjectCreated = async (
-    handle: FileSystemDirectoryHandle,
+    handle: FileSystemDirectoryHandle | null,
     projectName: string,
-    projectTitle: string
+    projectTitle: string,
+    virtualId?: string
   ) => {
-    await saveLastDirectoryHandle(handle);
-    await saveProjectRecord(projectName, 'local', projectTitle);
-    navigate('/workspace');
+    if (handle) {
+      await saveLastDirectoryHandle(handle);
+      await saveProjectRecord(projectName, 'local', projectTitle);
+      navigate('/workspace');
+    } else if (virtualId) {
+      navigate(`/workspace?virtualId=${encodeURIComponent(virtualId)}`);
+    }
   };
 
-  // 2. Open Sample Workspace
+  // 3. Open Sample Workspace
   const handleOpenSample = async () => {
     await saveProjectRecord('sample_workspace', 'demo', '넥스트페이 차세대 결제 정산 시스템');
     navigate('/workspace?mode=sample');
   };
 
-  // 3. Remove from History
+  // 4. Open Project by Record
+  const handleOpenProject = (proj: ProjectRecord) => {
+    if (proj.type === 'demo') {
+      navigate('/workspace?mode=sample');
+    } else if (proj.type === 'virtual') {
+      navigate(`/workspace?virtualId=virtual_${encodeURIComponent(proj.name)}`);
+    } else {
+      navigate('/workspace');
+    }
+  };
+
+  // 5. ZIP Upload & Import
+  const handleOpenZipPicker = () => {
+    zipInputRef.current?.click();
+  };
+
+  const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsLoading(true);
+      const res = await importWorkspaceFromZip(file);
+      navigate(`/workspace?virtualId=${encodeURIComponent(res.projectId)}`);
+    } catch (err) {
+      console.error('ZIP 파일 가져오기 오류:', err);
+      alert('ZIP 기획서 파일을 불러오지 못했습니다. 올바른 압축 파일인지 확인해주세요.');
+      setIsLoading(false);
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  // 6. Direct ZIP Download for Virtual Projects from Card
+  const handleDownloadProjectZip = async (e: React.MouseEvent, proj: ProjectRecord) => {
+    e.stopPropagation();
+    try {
+      if (proj.type === 'virtual') {
+        const rootNode = await getVirtualWorkspace(`virtual_${proj.name}`);
+        if (rootNode) {
+          await exportWorkspaceAsZip(rootNode);
+          return;
+        }
+      }
+      alert('해당 프로젝트는 로컬 폴더 직접 마운트 상태입니다. 워크스페이스에 진입한 후 상단 ZIP 내보내기를 이용해주세요.');
+    } catch (err) {
+      console.error('ZIP 내보내기 실패:', err);
+      alert('ZIP 파일 생성 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 7. Remove from History
   const handleDeleteRecord = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!confirm('최근 프로젝트 목록에서 삭제하시겠습니까? (실제 컴퓨터의 폴더는 삭제되지 않습니다)')) return;
+    const isVirtual = id.startsWith('virtual_');
+    const message = isVirtual
+      ? '이 프로젝트를 브라우저 저장소에서 완전히 삭제하시겠습니까?\n(삭제 전 ZIP 다운로드로 백업하실 수 있습니다)'
+      : '최근 프로젝트 목록에서 삭제하시겠습니까? (실제 컴퓨터의 폴더는 삭제되지 않습니다)';
+    if (!confirm(message)) return;
     await removeProjectRecord(id);
     setProjects((prev) => prev.filter((p) => p.id !== id));
   };
@@ -234,6 +299,24 @@ export const ProjectHubPage: React.FC = () => {
               <span className="hidden sm:inline">샘플 둘러보기</span>
             </button>
 
+            <input
+              type="file"
+              ref={zipInputRef}
+              accept=".zip"
+              className="hidden"
+              onChange={handleZipUpload}
+            />
+
+            <button
+              type="button"
+              onClick={handleOpenZipPicker}
+              title="스마트폰이나 PC에 저장된 기획서 ZIP 파일을 불러옵니다"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition active:scale-95 whitespace-nowrap"
+            >
+              <Archive className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span>ZIP 불러오기</span>
+            </button>
+
             <button
               type="button"
               onClick={handleOpenFolder}
@@ -247,7 +330,7 @@ export const ProjectHubPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsCreateModalOpen(true)}
-              title="새 프로젝트 폴더를 생성하고 시작합니다"
+              title="새 프로젝트를 생성하고 시작합니다"
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition active:scale-95 whitespace-nowrap"
             >
               <FolderPlus className="w-4 h-4 shrink-0" />
@@ -304,18 +387,22 @@ export const ProjectHubPage: React.FC = () => {
             <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl divide-y divide-slate-100 dark:divide-slate-800/80 overflow-hidden shadow-sm">
               {filteredProjects.map((proj) => {
                 const isLocal = proj.type === 'local';
+                const isVirtual = proj.type === 'virtual';
                 return (
                   <div
                     key={proj.id}
-                    onClick={() => {
-                      if (isLocal) navigate('/workspace');
-                      else navigate('/workspace?mode=sample');
-                    }}
+                    onClick={() => handleOpenProject(proj)}
                     className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition group"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 shrink-0 group-hover:bg-blue-50 dark:group-hover:bg-blue-950 group-hover:text-blue-600 transition">
-                        {isLocal ? <HardDrive className="w-4 h-4" /> : <Sparkles className="w-4 h-4 text-indigo-500" />}
+                        {isLocal ? (
+                          <HardDrive className="w-4 h-4" />
+                        ) : isVirtual ? (
+                          <Archive className="w-4 h-4 text-emerald-500" />
+                        ) : (
+                          <Sparkles className="w-4 h-4 text-indigo-500" />
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -329,15 +416,25 @@ export const ProjectHubPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 shrink-0 ml-2">
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
                       <span className="text-[11px] text-slate-400 hidden md:inline">
                         {new Date(proj.lastOpened).toLocaleDateString()}
                       </span>
+                      {isVirtual && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDownloadProjectZip(e, proj)}
+                          title="ZIP 압축 파일 다운로드"
+                          className="p-1.5 text-slate-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 active:scale-90"
+                        >
+                          <Archive className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => handleDeleteRecord(e, proj.id)}
                         title="기록에서 삭제"
-                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition opacity-0 group-hover:opacity-100"
+                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 active:scale-90"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -358,16 +455,11 @@ export const ProjectHubPage: React.FC = () => {
             >
               {filteredProjects.map((proj) => {
                 const isLocal = proj.type === 'local';
+                const isVirtual = proj.type === 'virtual';
                 return (
                   <div
                     key={proj.id}
-                    onClick={() => {
-                      if (isLocal) {
-                        navigate('/workspace');
-                      } else {
-                        navigate('/workspace?mode=sample');
-                      }
-                    }}
+                    onClick={() => handleOpenProject(proj)}
                     className="group relative cursor-pointer bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 hover:border-blue-500 dark:hover:border-blue-500 rounded-2xl p-4 shadow-sm hover:shadow-md hover:shadow-blue-500/5 transition-all flex flex-col justify-between gap-3"
                   >
                     <div className="space-y-2">
@@ -375,14 +467,21 @@ export const ProjectHubPage: React.FC = () => {
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
                             isLocal
-                              ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
-                              : 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60'
+                              ? 'bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60'
+                              : isVirtual
+                                ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
+                                : 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60'
                           }`}
                         >
                           {isLocal ? (
                             <>
                               <HardDrive className="w-3 h-3" />
                               로컬 폴더
+                            </>
+                          ) : isVirtual ? (
+                            <>
+                              <Archive className="w-3 h-3" />
+                              안심 저장소 (ZIP)
                             </>
                           ) : (
                             <>
@@ -392,22 +491,34 @@ export const ProjectHubPage: React.FC = () => {
                           )}
                         </span>
 
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteRecord(e, proj.id)}
-                          title="목록에서 제거 (실제 폴더는 보존)"
-                          className="p-1 text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {isVirtual && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleDownloadProjectZip(e, proj)}
+                              title="ZIP 압축 파일 다운로드"
+                              className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 active:scale-90"
+                            >
+                              <Archive className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteRecord(e, proj.id)}
+                            title="목록에서 제거"
+                            className="p-1.5 text-slate-400 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 active:scale-90"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
                       <div>
-                        <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors break-keep">
                           {proj.title || proj.name}
                         </h4>
                         <p className="text-xs text-slate-400 dark:text-slate-500 truncate font-mono mt-0.5">
-                          폴더: {proj.name}
+                          {isVirtual ? '가상 스토리지' : `폴더: ${proj.name}`}
                         </p>
                       </div>
                     </div>
