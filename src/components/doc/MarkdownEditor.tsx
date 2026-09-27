@@ -202,6 +202,27 @@ export const MarkdownEditor: React.FC<Props> = ({
       const widgetHtml = createPrototypeWidgetHtml(DEFAULT_INLINE_HTML_CONTENT);
       document.execCommand('insertHTML', false, widgetHtml);
       syncVisualToMarkdown();
+      setTimeout(() => {
+        if (visualEditorRef.current) {
+          const widgets = visualEditorRef.current.querySelectorAll('.prototype-embed-widget');
+          const lastWidget = widgets[widgets.length - 1];
+          if (lastWidget) {
+            let next = lastWidget.nextElementSibling;
+            if (!next || next.classList.contains('prototype-embed-widget')) {
+              const p = document.createElement('p');
+              p.innerHTML = '<br>';
+              lastWidget.after(p);
+              next = p;
+            }
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.setStart(next, 0);
+            range.collapse(true);
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+          }
+        }
+      }, 50);
     } else {
       insertRawText(`\n${DEFAULT_INLINE_HTML_TEMPLATE.trim()}\n\n`);
     }
@@ -325,25 +346,56 @@ export const MarkdownEditor: React.FC<Props> = ({
       return;
     }
 
-    // 2. Prototype widget delete
-    const deleteBtn = target.closest('.prototype-delete-btn');
-    if (deleteBtn) {
+    // 2. Prototype: 뷰포트 데스크톱 전환
+    const desktopBtn = target.closest('.prototype-viewport-desktop');
+    if (desktopBtn) {
       e.preventDefault();
       e.stopPropagation();
-      const widget = deleteBtn.closest('.prototype-embed-widget');
-      if (widget) {
-        widget.remove();
-        syncVisualToMarkdown();
+      const widget = desktopBtn.closest('.prototype-embed-widget');
+      const mobileBtn = widget?.querySelector('.prototype-viewport-mobile');
+      const container = widget?.querySelector('.prototype-iframe-container');
+      const iframe = widget?.querySelector('iframe');
+      if (widget && container) {
+        container.className = 'prototype-iframe-container w-full transition-all duration-300 bg-white dark:bg-slate-950 rounded-xl overflow-hidden shadow-inner border border-slate-800 max-w-full';
+        if (iframe) {
+          iframe.className = 'w-full h-80 border-none block pointer-events-auto';
+        }
+        desktopBtn.className = 'prototype-viewport-desktop p-1.5 rounded-md text-white bg-slate-700 transition';
+        if (mobileBtn) {
+          mobileBtn.className = 'prototype-viewport-mobile p-1.5 rounded-md text-slate-400 hover:text-white transition';
+        }
       }
       return;
     }
 
-    // 3. Prototype code panel toggle
-    const viewToggleBtn = target.closest('.prototype-view-toggle');
-    if (viewToggleBtn) {
+    // 3. Prototype: 뷰포트 모바일 전환 (375px 스마트폰 프레임)
+    const mobileBtn = target.closest('.prototype-viewport-mobile');
+    if (mobileBtn) {
       e.preventDefault();
       e.stopPropagation();
-      const widget = viewToggleBtn.closest('.prototype-embed-widget');
+      const widget = mobileBtn.closest('.prototype-embed-widget');
+      const desktopBtnEl = widget?.querySelector('.prototype-viewport-desktop');
+      const container = widget?.querySelector('.prototype-iframe-container');
+      const iframe = widget?.querySelector('iframe');
+      if (widget && container) {
+        container.className = 'prototype-iframe-container w-full transition-all duration-300 bg-white dark:bg-slate-950 overflow-hidden max-w-[375px] rounded-[36px] border-[6px] border-slate-800 shadow-2xl ring-1 ring-slate-700/50 flex flex-col shrink-0';
+        if (iframe) {
+          iframe.className = 'w-full border-none block transition-all duration-300 h-[580px] pointer-events-auto';
+        }
+        mobileBtn.className = 'prototype-viewport-mobile p-1.5 rounded-md text-white bg-slate-700 transition';
+        if (desktopBtnEl) {
+          desktopBtnEl.className = 'prototype-viewport-desktop p-1.5 rounded-md text-slate-400 hover:text-white transition';
+        }
+      }
+      return;
+    }
+
+    // 4. Prototype: 코드 편집 패널 열기/닫기
+    const codeToggleBtn = target.closest('.prototype-code-toggle') || target.closest('.prototype-code-close-btn');
+    if (codeToggleBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const widget = codeToggleBtn.closest('.prototype-embed-widget');
       const panel = widget?.querySelector('.prototype-code-panel');
       if (panel) {
         panel.classList.toggle('hidden');
@@ -351,7 +403,7 @@ export const MarkdownEditor: React.FC<Props> = ({
       return;
     }
 
-    // 4. Prototype code apply
+    // 5. Prototype: 코드 적용
     const codeSaveBtn = target.closest('.prototype-code-save-btn');
     if (codeSaveBtn) {
       e.preventDefault();
@@ -368,6 +420,115 @@ export const MarkdownEditor: React.FC<Props> = ({
         syncVisualToMarkdown();
       }
       return;
+    }
+
+    // 6. Prototype: 화면 새로고침
+    const reloadBtn = target.closest('.prototype-reload-btn');
+    if (reloadBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const widget = reloadBtn.closest('.prototype-embed-widget');
+      const iframe = widget?.querySelector('iframe') as HTMLIFrameElement | null;
+      if (iframe) {
+        const currentSrcDoc = iframe.srcdoc;
+        iframe.srcdoc = '';
+        setTimeout(() => {
+          iframe.srcdoc = currentSrcDoc;
+        }, 50);
+      }
+      return;
+    }
+
+    // 7. Prototype: 전체화면 토글
+    const fullscreenBtn = target.closest('.prototype-fullscreen-btn');
+    if (fullscreenBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const widget = fullscreenBtn.closest('.prototype-embed-widget');
+      if (widget) {
+        const isFull = widget.classList.contains('fixed');
+        if (isFull) {
+          widget.classList.remove('fixed', 'inset-0', 'z-50', 'm-0', 'rounded-none', 'h-screen', 'w-screen', 'flex', 'flex-col');
+          widget.classList.add('my-6', 'rounded-2xl');
+        } else {
+          widget.classList.remove('my-6', 'rounded-2xl');
+          widget.classList.add('fixed', 'inset-0', 'z-50', 'm-0', 'rounded-none', 'h-screen', 'w-screen', 'flex', 'flex-col');
+        }
+      }
+      return;
+    }
+
+    // 8. Prototype: 새 탭에서 열기
+    const externalBtn = target.closest('.prototype-external-btn');
+    if (externalBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const widget = externalBtn.closest('.prototype-embed-widget');
+      if (widget) {
+        const encoded = widget.getAttribute('data-prototype-code') || '';
+        const code = encoded ? decodeURIComponent(encoded) : '';
+        const blob = new Blob([code], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      }
+      return;
+    }
+
+    // 9. Prototype: 블록 삭제
+    const deleteBtn = target.closest('.prototype-delete-btn');
+    if (deleteBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (confirm('이 프로토타입 블록을 삭제하시겠습니까?')) {
+        const widget = deleteBtn.closest('.prototype-embed-widget');
+        if (widget) {
+          widget.remove();
+          syncVisualToMarkdown();
+        }
+      }
+      return;
+    }
+
+    // 10. Prototype: 위젯 여백/외곽 클릭 시 바로 아래 문단으로 커서 이동
+    const widgetCard = target.closest('.prototype-embed-widget');
+    if (widgetCard && !target.closest('button') && !target.closest('textarea') && !target.closest('iframe')) {
+      let next = widgetCard.nextElementSibling;
+      if (!next || next.classList.contains('prototype-embed-widget')) {
+        const p = document.createElement('p');
+        p.innerHTML = '<br>';
+        widgetCard.after(p);
+        next = p;
+      }
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(next);
+      range.collapse(true);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      syncVisualToMarkdown();
+    }
+  };
+
+  const handleEditorWrapperClick = (e: React.MouseEvent) => {
+    if (!visualEditorRef.current) return;
+    const editor = visualEditorRef.current;
+    
+    // 에디터 바닥 빈 여백을 클릭했거나 위젯 바깥을 클릭했을 때
+    if (e.target === e.currentTarget || e.target === editor) {
+      let last = editor.lastElementChild;
+      if (!last || last.classList.contains('prototype-embed-widget') || last.tagName === 'TABLE') {
+        const p = document.createElement('p');
+        p.innerHTML = '<br>';
+        editor.appendChild(p);
+        last = p;
+      }
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(last);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      syncVisualToMarkdown();
     }
   };
 
@@ -424,7 +585,10 @@ export const MarkdownEditor: React.FC<Props> = ({
 
       {/* Editor Body */}
       {mode === 'visual' ? (
-        <div className="p-4 sm:p-6 bg-white dark:bg-slate-900 min-h-[380px] max-h-[700px] overflow-y-auto">
+        <div
+          onClick={handleEditorWrapperClick}
+          className="p-4 sm:p-6 bg-white dark:bg-slate-900 min-h-[380px] max-h-[700px] overflow-y-auto cursor-text"
+        >
           <div
             ref={visualEditorRef}
             contentEditable

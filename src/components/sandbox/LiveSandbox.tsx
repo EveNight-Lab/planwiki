@@ -116,10 +116,15 @@ export const LiveSandbox: React.FC<Props> = ({ initialCode, onSaveCode, title = 
       </script>
     `;
 
+    const viewportMeta = code.includes('name="viewport"') || code.includes("name='viewport'")
+      ? ''
+      : '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
+
+    const injection = `${viewportMeta}${interceptor}`;
     if (code.includes('<head>')) {
-      return code.replace('<head>', `<head>${interceptor}`);
+      return code.replace('<head>', `<head>${injection}`);
     }
-    return interceptor + code;
+    return injection + code;
   }, [code]);
 
   const handleOpenExternal = () => {
@@ -152,12 +157,12 @@ export const LiveSandbox: React.FC<Props> = ({ initialCode, onSaveCode, title = 
         </div>
 
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          {/* Viewport size toggle */}
+          {/* Viewport size toggle (가로 모드: 데스크톱 비율 / 세로 모드: 모바일 비율) */}
           <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700">
             <button
               type="button"
               onClick={() => setViewportMode('desktop')}
-              title="데스크톱 뷰 (100%)"
+              title="가로 모드 (데스크톱 와이드 비율)"
               className={`p-1.5 rounded-md transition ${viewportMode === 'desktop' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
             >
               <Monitor className="w-3.5 h-3.5" />
@@ -165,7 +170,7 @@ export const LiveSandbox: React.FC<Props> = ({ initialCode, onSaveCode, title = 
             <button
               type="button"
               onClick={() => setViewportMode('mobile')}
-              title="모바일 뷰 (375px)"
+              title="세로 모드 (모바일 스마트폰 비율 375px)"
               className={`p-1.5 rounded-md transition ${viewportMode === 'mobile' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
             >
               <Smartphone className="w-3.5 h-3.5" />
@@ -272,21 +277,28 @@ export const LiveSandbox: React.FC<Props> = ({ initialCode, onSaveCode, title = 
         }`}
       >
         <div
-          className={`transition-all duration-300 bg-white rounded-xl shadow-2xl overflow-hidden border border-slate-700/50 max-w-full ${
+          className={`transition-all duration-300 bg-white shadow-2xl overflow-hidden max-w-full ${
             viewportMode === 'mobile'
-              ? 'w-[375px] h-full max-h-[700px]'
+              ? 'w-[375px] h-[580px] rounded-[36px] border-[6px] border-slate-800 ring-1 ring-slate-700/50 flex flex-col shrink-0'
               : isFullScreen
-                ? 'w-full h-full'
-                : 'w-full h-[360px] sm:h-[420px]'
+                ? 'w-full h-full rounded-none border-none'
+                : 'w-full h-[360px] sm:h-[420px] rounded-xl border border-slate-700/50'
           }`}
         >
+          {/* 모바일 스마트폰 상단 노치/스피커 바 */}
+          {viewportMode === 'mobile' && !isFullScreen && (
+            <div className="bg-slate-800 py-1.5 flex justify-center items-center gap-1.5 select-none shrink-0 border-b border-slate-700/50">
+              <div className="w-12 h-1 bg-slate-600 rounded-full" />
+              <div className="w-2 h-2 rounded-full bg-slate-700" />
+            </div>
+          )}
           <iframe
             key={reloadKey}
             ref={iframeRef}
             srcDoc={sandboxHtml}
             title={title}
             sandbox="allow-scripts allow-modals allow-forms allow-same-origin"
-            className="w-full h-full border-0"
+            className="w-full h-full border-0 flex-1"
           />
         </div>
       </div>

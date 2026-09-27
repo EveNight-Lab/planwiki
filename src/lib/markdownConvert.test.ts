@@ -39,4 +39,41 @@ describe('markdownConvert 인라인 프로토타입 위젯 변환 테스트', ()
     const blockCount = (restoredMd.match(/```html:preview/g) || []).length;
     expect(blockCount).toBe(2);
   });
+
+  it('빈 줄과 <style> button {...} </style> 태그가 포함되어 있어도 마크다운 파서가 깨뜨리지 않고 위젯으로 안전 격리된다', () => {
+    const dangerousMd = `### 위험 태그 격리 검증
+
+\`\`\`html:preview
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    button { background: #3b82f6; color: white; border: none; padding: 10px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <button>테스트 버튼</button>
+  </div>
+</body>
+</html>
+\`\`\`
+`;
+
+    const html = markdownToHtml(dangerousMd);
+    expect(html).toContain('prototype-embed-widget');
+    // 위젯의 7가지 핵심 액션 요소들이 온전히 포함되어 있는지 확인
+    expect(html).toContain('prototype-viewport-desktop');
+    expect(html).toContain('prototype-viewport-mobile');
+    expect(html).toContain('prototype-code-toggle');
+    expect(html).toContain('prototype-reload-btn');
+    expect(html).toContain('prototype-fullscreen-btn');
+    expect(html).toContain('prototype-external-btn');
+    expect(html).toContain('prototype-delete-btn');
+
+    // 마크다운 복원 시에도 무손실 보존
+    const restored = htmlToMarkdown(html);
+    expect(restored).toContain('button { background: #3b82f6;');
+    expect(restored).toContain('```html:preview');
+  });
 });

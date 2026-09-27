@@ -7,7 +7,7 @@
  */
 import React, { useMemo } from 'react';
 import { marked } from 'marked';
-import { splitMarkdownIntoSegments, type ContentSegment } from '../../lib/markdownSegments';
+import { splitMarkdownIntoSegments, joinSegmentsToMarkdown, type ContentSegment } from '../../lib/markdownSegments';
 import { InlineSandbox } from '../sandbox/InlineSandbox';
 
 interface Props {
@@ -125,7 +125,18 @@ export const MarkdownViewer: React.FC<Props> = ({
             <InlineSandbox
               key={`inline-sandbox-${idx}`}
               htmlCode={seg.html}
-              title="인라인 인터랙티브 프로토타입"
+              title="인라인 프로토타입"
+              onUpdateHtmlCode={(newHtml) => {
+                if (!onUpdateContent) return;
+                const updatedSegments = [...segments];
+                updatedSegments[idx] = { type: 'html_preview', html: newHtml, rawCode: newHtml };
+                onUpdateContent(joinSegmentsToMarkdown(updatedSegments));
+              }}
+              onDelete={() => {
+                if (!onUpdateContent) return;
+                const updatedSegments = segments.filter((_, i) => i !== idx);
+                onUpdateContent(joinSegmentsToMarkdown(updatedSegments));
+              }}
             />
           );
         }

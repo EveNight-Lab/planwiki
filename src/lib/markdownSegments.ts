@@ -88,16 +88,17 @@ export const DEFAULT_INLINE_HTML_CONTENT = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body { font-family: sans-serif; padding: 16px; background: #f8fafc; margin: 0; }
-    .card { background: white; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center; }
-    button { background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .card { background: white; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    button { background: #3b82f6; color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; width: 100%; max-width: 200px; }
     button:hover { background: #2563eb; }
   </style>
 </head>
 <body>
   <div class="card">
-    <p style="margin: 0 0 12px; font-weight: bold; color: #1e293b;">인라인 프로토타입</p>
+    <p style="margin: 0 0 14px; font-weight: bold; font-size: 16px; color: #1e293b;">인라인 프로토타입</p>
     <button onclick="alert('인라인 샌드박스 동작 확인!')">테스트 버튼</button>
   </div>
 </body>
