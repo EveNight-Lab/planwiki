@@ -14,7 +14,6 @@ import {
   Smartphone,
   Monitor,
   Trash2,
-  Check,
   X,
   Terminal,
   ExternalLink,
@@ -93,9 +92,19 @@ export const InlineSandbox: React.FC<Props> = ({
     setLogs([]);
   };
 
-  const handleApplyCode = () => {
-    if (onUpdateHtmlCode) {
+  // Auto-sync code changes to parent markdown (debounced 300ms)
+  useEffect(() => {
+    if (!onUpdateHtmlCode || editableCode === htmlCode) return;
+    const timer = setTimeout(() => {
       onUpdateHtmlCode(editableCode);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [editableCode, htmlCode, onUpdateHtmlCode]);
+
+  const handleClearCode = () => {
+    setEditableCode('');
+    if (onUpdateHtmlCode) {
+      onUpdateHtmlCode('');
     }
     handleReload();
   };
@@ -277,19 +286,18 @@ export const InlineSandbox: React.FC<Props> = ({
         <div className="border-b border-slate-800 bg-slate-950 p-3 sm:p-4 transition-all">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono text-slate-400">인라인 HTML/CSS/JS 코드</span>
+              <span className="text-xs font-mono text-slate-400">인라인 HTML/CSS/JS 코드 (입력 시 자동 반영)</span>
             </div>
             <div className="flex items-center gap-2">
-              {onUpdateHtmlCode && (
-                <button
-                  type="button"
-                  onClick={handleApplyCode}
-                  className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>코드 적용</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleClearCode}
+                title="코드 전체 지우기"
+                className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-800 rounded-lg text-xs font-semibold transition shadow-xs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>코드 지우기</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setShowCodeEditor(false)}

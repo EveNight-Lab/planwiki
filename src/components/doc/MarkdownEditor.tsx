@@ -13,6 +13,7 @@ import { Save } from 'lucide-react';
 import { MarkdownViewer } from './MarkdownViewer';
 import { VisualTableEditor } from './VisualTableEditor';
 import { EditorToolbar } from './EditorToolbar';
+import { SmartFloatingToolbar } from './SmartFloatingToolbar';
 import { markdownToHtml, htmlToMarkdown, createPrototypeWidgetHtml } from '../../lib/markdownConvert';
 import { DEFAULT_INLINE_HTML_CONTENT, DEFAULT_INLINE_HTML_TEMPLATE } from '../../lib/markdownSegments';
 
@@ -239,81 +240,6 @@ export const MarkdownEditor: React.FC<Props> = ({
     setShowTableModal(false);
   };
 
-  const handleAddTableRow = () => {
-    if (mode === 'visual' && visualEditorRef.current) {
-      const sel = window.getSelection();
-      let targetTable: HTMLTableElement | null = null;
-      if (sel && sel.anchorNode) {
-        const el = sel.anchorNode.nodeType === Node.ELEMENT_NODE
-          ? (sel.anchorNode as HTMLElement)
-          : sel.anchorNode.parentElement;
-        targetTable = el?.closest('table') || null;
-      }
-      if (!targetTable) {
-        targetTable = visualEditorRef.current.querySelector('table');
-      }
-
-      if (targetTable) {
-        const colCount = targetTable.rows[0]?.cells.length || 3;
-        const tbody = targetTable.querySelector('tbody') || targetTable;
-        const newRow = document.createElement('tr');
-        for (let i = 0; i < colCount; i++) {
-          const td = document.createElement('td');
-          td.textContent = '새 항목';
-          newRow.appendChild(td);
-        }
-        tbody.appendChild(newRow);
-        syncVisualToMarkdown();
-        return;
-      }
-    }
-    setShowTableModal(true);
-  };
-
-  const handleAddTableCol = () => {
-    if (mode === 'visual' && visualEditorRef.current) {
-      const sel = window.getSelection();
-      let targetTable: HTMLTableElement | null = null;
-      if (sel && sel.anchorNode) {
-        const el = sel.anchorNode.nodeType === Node.ELEMENT_NODE
-          ? (sel.anchorNode as HTMLElement)
-          : sel.anchorNode.parentElement;
-        targetTable = el?.closest('table') || null;
-      }
-      if (!targetTable) {
-        targetTable = visualEditorRef.current.querySelector('table');
-      }
-
-      if (targetTable) {
-        const theadRow = targetTable.querySelector('thead tr') || targetTable.rows[0];
-        if (theadRow) {
-          const th = document.createElement('th');
-          th.textContent = '새 열';
-          theadRow.appendChild(th);
-        }
-
-        const rows = targetTable.querySelectorAll('tbody tr');
-        if (rows.length > 0) {
-          rows.forEach((row) => {
-            const td = document.createElement('td');
-            td.textContent = '-';
-            row.appendChild(td);
-          });
-        } else {
-          for (let i = 1; i < targetTable.rows.length; i++) {
-            const td = document.createElement('td');
-            td.textContent = '-';
-            targetTable.rows[i].appendChild(td);
-          }
-        }
-
-        syncVisualToMarkdown();
-        return;
-      }
-    }
-    setShowTableModal(true);
-  };
-
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !onUploadAsset) return;
@@ -403,19 +329,19 @@ export const MarkdownEditor: React.FC<Props> = ({
       return;
     }
 
-    // 5. Prototype: 코드 적용
-    const codeSaveBtn = target.closest('.prototype-code-save-btn');
-    if (codeSaveBtn) {
+    // 5. Prototype: 코드 지우기
+    const codeClearBtn = target.closest('.prototype-code-clear-btn');
+    if (codeClearBtn) {
       e.preventDefault();
       e.stopPropagation();
-      const widget = codeSaveBtn.closest('.prototype-embed-widget');
+      const widget = codeClearBtn.closest('.prototype-embed-widget');
       const textarea = widget?.querySelector('.prototype-code-textarea') as HTMLTextAreaElement | null;
       const iframe = widget?.querySelector('iframe') as HTMLIFrameElement | null;
       if (widget && textarea) {
-        const newCode = textarea.value;
-        widget.setAttribute('data-prototype-code', encodeURIComponent(newCode));
+        textarea.value = '';
+        widget.setAttribute('data-prototype-code', '');
         if (iframe) {
-          iframe.srcdoc = newCode;
+          iframe.srcdoc = '';
         }
         syncVisualToMarkdown();
       }
@@ -556,19 +482,10 @@ export const MarkdownEditor: React.FC<Props> = ({
 
   return (
     <div className="border border-blue-200 dark:border-blue-900 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-xl transition-all">
-      {/* Extracted Modular Toolbar */}
+      {/* Minimal Header Toolbar */}
       <EditorToolbar
         mode={mode}
         onToggleMode={handleToggleMode}
-        onFormatHeading={handleFormatHeading}
-        onFormatInline={execFormat}
-        onInsertCallout={handleInsertCallout}
-        onOpenTableModal={() => setShowTableModal(true)}
-        onAddTableRow={handleAddTableRow}
-        onAddTableCol={handleAddTableCol}
-        onInsertChecklist={handleInsertChecklist}
-        onInsertInlineSandbox={handleInsertInlineSandbox}
-        onTriggerImageUpload={() => fileInputRef.current?.click()}
         isSaved={isSaved}
         showPreview={showPreview}
         onTogglePreview={() => setShowPreview(!showPreview)}
@@ -593,7 +510,19 @@ export const MarkdownEditor: React.FC<Props> = ({
             ref={visualEditorRef}
             contentEditable
             suppressContentEditableWarning
-            onInput={syncVisualToMarkdown}
+            onInput={(e) => {
+              const target = e.target as HTMLElement;
+              if (target && target.classList?.contains('prototype-code-textarea')) {
+                const widget = target.closest('.prototype-embed-widget');
+                const textarea = target as HTMLTextAreaElement;
+                const iframe = widget?.querySelector('iframe') as HTMLIFrameElement | null;
+                if (widget && iframe) {
+                  widget.setAttribute('data-prototype-code', encodeURIComponent(textarea.value));
+                  iframe.srcdoc = textarea.value;
+                }
+              }
+              syncVisualToMarkdown();
+            }}
             onClick={handleVisualClick}
             className="prose prose-slate dark:prose-invert max-w-none text-slate-800 dark:text-slate-100 outline-none
               [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-slate-900 dark:[&_h1]:text-white [&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:pb-2 [&_h1]:border-b [&_h1]:border-slate-200 dark:[&_h1]:border-slate-800
@@ -666,6 +595,20 @@ export const MarkdownEditor: React.FC<Props> = ({
         isOpen={showTableModal}
         onClose={() => setShowTableModal(false)}
         onInsertTable={handleInsertTable}
+      />
+
+      {/* 스마트 컨텍스추얼 플로팅 도구함 및 퀵 생성 FAB */}
+      <SmartFloatingToolbar
+        editorRef={visualEditorRef}
+        textareaRef={textareaRef}
+        mode={mode}
+        onFormatInline={execFormat}
+        onFormatHeading={handleFormatHeading}
+        onOpenTableModal={() => setShowTableModal(true)}
+        onInsertChecklist={handleInsertChecklist}
+        onInsertCallout={handleInsertCallout}
+        onInsertInlineSandbox={handleInsertInlineSandbox}
+        onTriggerImageUpload={() => fileInputRef.current?.click()}
       />
     </div>
   );

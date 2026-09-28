@@ -367,22 +367,30 @@ export const WorkspaceView: React.FC = () => {
     const target = findNode(state.rootNode, nodeId);
     if (!target) return null;
 
-    let blobUrl = URL.createObjectURL(file);
+    let assetUrl: string;
 
     if (state.isLocal && target.dirHandle) {
       const writtenUrl = await writeAssetFile(target.dirHandle, file.name, file);
-      if (writtenUrl) blobUrl = writtenUrl;
+      assetUrl = writtenUrl || URL.createObjectURL(file);
+    } else {
+      // 가상 프로젝트 모드: 새로고침 후에도 깨지지 않도록 Data URL(Base64)로 영구 저장
+      assetUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(URL.createObjectURL(file));
+        reader.readAsDataURL(file);
+      });
     }
 
     setState((s) => ({
       ...s,
       rootNode: updateNodeInTree(s.rootNode, nodeId, (n) => ({
         ...n,
-        assets: { ...n.assets, [file.name]: blobUrl },
+        assets: { ...n.assets, [file.name]: assetUrl },
       })),
     }));
 
-    return blobUrl;
+    return assetUrl;
   };
 
   // Open modal to add child node

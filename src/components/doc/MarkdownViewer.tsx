@@ -8,6 +8,7 @@
 import React, { useMemo } from 'react';
 import { marked } from 'marked';
 import { splitMarkdownIntoSegments, joinSegmentsToMarkdown, type ContentSegment } from '../../lib/markdownSegments';
+import { replaceAssetUrls } from '../../lib/assetHelper';
 import { InlineSandbox } from '../sandbox/InlineSandbox';
 
 interface Props {
@@ -34,11 +35,7 @@ function toggleTaskCheckbox(md: string, targetIndex: number): string {
 function renderMarkdownHtml(mdText: string, assets: Record<string, string>): string {
   if (!mdText.trim()) return '';
 
-  let processed = mdText;
-  for (const [filename, url] of Object.entries(assets)) {
-    const regex = new RegExp(`assets/${filename}`, 'g');
-    processed = processed.replace(regex, url);
-  }
+  const processed = replaceAssetUrls(mdText, assets);
 
   try {
     const rawHtml = marked.parse(processed, {

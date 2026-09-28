@@ -138,7 +138,8 @@ export async function scanDirectoryNode(
     for await (const entry of (assetsHandle as any).values()) {
       if (entry.kind === 'file') {
         const file = await entry.getFile();
-        if (file.type.startsWith('image/')) {
+        const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(entry.name);
+        if (isImage) {
           assets[entry.name] = URL.createObjectURL(file);
         }
       }

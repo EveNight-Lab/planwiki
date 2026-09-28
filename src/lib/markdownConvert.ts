@@ -8,6 +8,7 @@
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
+import { replaceAssetUrls, restoreAssetUrls } from './assetHelper';
 
 const turndownService = new TurndownService({
   headingStyle: 'atx',
@@ -112,10 +113,10 @@ export function createPrototypeWidgetHtml(rawHtmlCode: string): string {
 
   <div class="prototype-code-panel hidden border-b border-slate-800 bg-slate-950 p-3 sm:p-4 transition-all">
     <div class="flex items-center justify-between mb-2">
-      <span class="text-xs font-mono text-slate-400">인라인 HTML/CSS/JS 코드</span>
+      <span class="text-xs font-mono text-slate-400">인라인 HTML/CSS/JS 코드 (입력 시 자동 반영)</span>
       <div class="flex items-center gap-2">
-        <button type="button" class="prototype-code-save-btn flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-xs">
-          <span>코드 적용</span>
+        <button type="button" class="prototype-code-clear-btn flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-800 rounded-lg text-xs font-semibold transition shadow-xs" title="코드 전체 지우기">
+          <span>코드 지우기</span>
         </button>
         <button type="button" class="prototype-code-close-btn p-1 text-slate-400 hover:text-white transition">
           ✕
@@ -138,11 +139,7 @@ export function createPrototypeWidgetHtml(rawHtmlCode: string): string {
  */
 export function markdownToHtml(md: string, assets: Record<string, string> = {}): string {
   if (!md) return '<p><br></p>';
-  let processed = md;
-  for (const [filename, url] of Object.entries(assets)) {
-    const regex = new RegExp(`assets/${filename}`, 'g');
-    processed = processed.replace(regex, url);
-  }
+  let processed = replaceAssetUrls(md, assets);
 
   // 1. 프로토타입 코드 블록(```html:preview ...)을 임시 토큰으로 분리 치환 (marked.parse 태그 훼손 원천 차단)
   const INLINE_SANDBOX_REGEX = /```(?:html:preview|html:interactive|html:sandbox)\s*([\s\S]*?)```/gi;
@@ -181,10 +178,7 @@ export function markdownToHtml(md: string, assets: Record<string, string> = {}):
  */
 export function htmlToMarkdown(html: string, assets: Record<string, string> = {}): string {
   if (!html) return '';
-  let processedHtml = html;
-  for (const [filename, url] of Object.entries(assets)) {
-    processedHtml = processedHtml.replaceAll(url, `assets/${filename}`);
-  }
+  const processedHtml = restoreAssetUrls(html, assets);
 
   try {
     return turndownService.turndown(processedHtml).trim();
