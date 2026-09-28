@@ -37,20 +37,22 @@ export function replaceAssetUrls(
 
     const rawEscaped = escapeRegExp(filename);
     const encodedEscaped = escapeRegExp(encodeURIComponent(filename));
+    // Turndown이나 마크다운 파서가 괄호 앞에 백슬래시(\(, \))를 붙인 경우도 지원
+    const backslashEscaped = escapeRegExp(filename.replace(/\(/g, '\\(').replace(/\)/g, '\\)'));
 
-    // 1. assets/ 경로 패턴 매칭 (./assets/, ../assets/, assets/, /assets/)
-    // 공백 및 괄호, 인코딩된 파일명 모두 지원
-    const pattern = `(?:\\.{1,2}\\/|\\/)?assets\\/(?:${rawEscaped}|${encodedEscaped})`;
+    // 1. assets/ 경로 패턴 매칭 (./assets/, ../assets/, assets/, /assets/ 및 <assets/...>)
+    // 공백 및 괄호, 인코딩된 파일명, 백슬래시 이스케이프 파일명 모두 지원
+    const pattern = `<?(?:\\.{1,2}\\/|\\/)?assets\\/(?:${rawEscaped}|${encodedEscaped}|${backslashEscaped})>?`;
     const assetsRegex = new RegExp(pattern, 'g');
     processed = processed.replace(assetsRegex, url);
 
     // 2. 마크다운 이미지 구문 ![alt](filename) 형태에서 assets/ 없이 단독 파일명으로 쓰인 경우 지원
-    const standalonePattern = `(!\\[[^\\]]*\\]\\()\\s*(?:${rawEscaped}|${encodedEscaped})\\s*(\\))`;
+    const standalonePattern = `(!\\[[^\\]]*\\]\\()\\s*<?(?:${rawEscaped}|${encodedEscaped}|${backslashEscaped})>?\\s*(\\))`;
     const standaloneRegex = new RegExp(standalonePattern, 'g');
     processed = processed.replace(standaloneRegex, `$1${url}$2`);
 
     // 3. HTML img 태그 src="filename" 형태에서 단독 파일명 지원
-    const htmlImgPattern = `(<img[^>]+src=["'])(?:${rawEscaped}|${encodedEscaped})(["'][^>]*>)`;
+    const htmlImgPattern = `(<img[^>]+src=["'])(?:${rawEscaped}|${encodedEscaped}|${backslashEscaped})(["'][^>]*>)`;
     const htmlImgRegex = new RegExp(htmlImgPattern, 'gi');
     processed = processed.replace(htmlImgRegex, `$1${url}$2`);
   }

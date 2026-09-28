@@ -76,4 +76,38 @@ describe('markdownConvert 인라인 프로토타입 위젯 변환 테스트', ()
     expect(restored).toContain('button { background: #3b82f6;');
     expect(restored).toContain('```html:preview');
   });
+
+  it('마크다운에 이미지가 있을 때 HTML 변환 후 다시 htmlToMarkdown 저장 시 assets/상대경로로 안전하게 복원된다', () => {
+    const assets = {
+      'sample image (1).png': 'blob:http://localhost:5173/abcdef-1234',
+      'logo.png': 'blob:http://localhost:5173/logo-5678',
+    };
+
+    const inputMd = `### 스크린샷 안내\n\n![샘플 이미지](assets/sample%20image%20(1).png)\n\n![로고](assets/logo.png)`;
+
+    // 1. Markdown -> HTML
+    const html = markdownToHtml(inputMd, assets);
+    expect(html).toContain('blob:http://localhost:5173/abcdef-1234');
+    expect(html).toContain('blob:http://localhost:5173/logo-5678');
+
+    // 2. HTML -> Markdown (저장 시점)
+    const restoredMd = htmlToMarkdown(html, assets);
+    expect(restoredMd).not.toContain('blob:');
+    expect(restoredMd).toContain('assets/sample image (1).png');
+    expect(restoredMd).toContain('assets/logo.png');
+  });
+
+  it('에디터에서 data-asset-name을 가진 img 태그 또는 alt 기반 img 태그도 htmlToMarkdown 시 assets/파일명으로 복원된다', () => {
+    const assets = {
+      'chart.png': 'blob:http://localhost:5173/chart-9999',
+    };
+
+    // 에디터가 새로 삽입한 이미지 태그 형태 (브라우저 DOM)
+    const editorHtml = `<p><img src="blob:http://localhost:5173/chart-9999" data-asset-name="chart.png" alt="chart.png" class="rounded-xl" /></p>`;
+
+    const restoredMd = htmlToMarkdown(editorHtml, assets);
+    expect(restoredMd).not.toContain('blob:');
+    expect(restoredMd).toContain('![chart.png](assets/chart.png)');
+  });
 });
+

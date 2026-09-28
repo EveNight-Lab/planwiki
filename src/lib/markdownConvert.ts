@@ -8,7 +8,7 @@
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
-import { replaceAssetUrls, restoreAssetUrls } from './assetHelper';
+import { replaceAssetUrls, restoreAssetUrls, escapeRegExp } from './assetHelper';
 
 const turndownService = new TurndownService({
   headingStyle: 'atx',
@@ -43,6 +43,57 @@ turndownService.addRule('prototypeWidget', {
     const encoded = el.getAttribute('data-prototype-code') || '';
     const code = encoded ? decodeURIComponent(encoded) : '';
     return `\n\n\`\`\`html:preview\n${code.trim()}\n\`\`\`\n\n`;
+  },
+});
+
+// Module-level context for assets map during Turndown serialization
+let currentAssetsMap: Record<string, string> = {};
+
+// Custom rule for image assets restoration (Turndown의 제멋대로 이스케이프 방지 및 assets/파일명 일원화)
+turndownService.addRule('imageAsset', {
+  filter: 'img',
+  replacement: (_, node) => {
+    const el = node as HTMLElement;
+    const src = el.getAttribute('src') || '';
+    const alt = el.getAttribute('alt') || '';
+    const dataAssetName = el.getAttribute('data-asset-name');
+
+    // 1. data-asset-name 속성이 있으면 최우선으로 원본 파일명 보존
+    if (dataAssetName) {
+      return `![${alt}](assets/${dataAssetName})`;
+    }
+
+    // 2. 현재 전달된 assets 맵에서 src (Blob URL, Data URL 등)와 일치하는 filename 역조회
+    for (const [filename, url] of Object.entries(currentAssetsMap)) {
+      if (!filename || !url) continue;
+      if (src === url || src.endsWith(url)) {
+        return `![${alt}](assets/${filename})`;
+      }
+    }
+
+    // 3. src에 이미 assets/ 가 포함된 경우 (예: assets/my-image.png 또는 http://.../assets/my-image.png)
+    if (src.includes('assets/')) {
+      const match = src.match(/(?:^|\/)assets\/(.+)$/);
+      if (match) {
+        let cleanName = match[1];
+        // 앞뒤 < > 또는 URL 디코딩 정돈
+        cleanName = cleanName.replace(/^[<]+|[>]+$/g, '');
+        try {
+          cleanName = decodeURIComponent(cleanName);
+        } catch {
+          // ignore
+        }
+        return `![${alt}](assets/${cleanName})`;
+      }
+    }
+
+    // 4. assets 맵에서 alt 텍스트와 일치하는 키가 있는 경우
+    if (alt && currentAssetsMap[alt]) {
+      return `![${alt}](assets/${alt})`;
+    }
+
+    // 5. 일반 외부 URL 이미지
+    return src ? `![${alt}](${src})` : '';
   },
 });
 
@@ -160,13 +211,26 @@ export function markdownToHtml(md: string, assets: Record<string, string> = {}):
     });
 
     let taskIdx = 0;
-    return rawHtml.replace(/<input\s+([^>]*?)type=["']checkbox["']([^>]*?)>/gi, (match) => {
+    rawHtml = rawHtml.replace(/<input\s+([^>]*?)type=["']checkbox["']([^>]*?)>/gi, (match) => {
       const idx = taskIdx++;
       const cleaned = match
         .replace(/\s*disabled(?:=["'][^"']*["'])?/gi, '')
         .replace(/class=["'][^"']*["']/gi, '');
       return `<input type="checkbox" data-task-index="${idx}" class="task-checkbox cursor-pointer w-4 h-4 rounded accent-blue-600 align-middle mr-1.5 transition-transform active:scale-90" ${cleaned.slice(6)}`;
     });
+
+    // 3. 에셋 매핑된 이미지들에 data-asset-name 속성 자동 부여하여 에디터 재저장 시 양방향 100% 무손실 보존
+    for (const [filename, url] of Object.entries(assets)) {
+      if (!filename || !url) continue;
+      const escapedUrl = escapeRegExp(url);
+      const imgRegex = new RegExp(`(<img\\s+[^>]*?src=["']${escapedUrl}["'][^>]*?)>`, 'gi');
+      rawHtml = rawHtml.replace(imgRegex, (m, prefix) => {
+        if (prefix.includes('data-asset-name=')) return m;
+        return `${prefix} data-asset-name="${filename}">`;
+      });
+    }
+
+    return rawHtml;
   } catch (err) {
     console.error('Failed to parse markdown to html:', err);
     return `<p>${md}</p>`;
@@ -178,11 +242,15 @@ export function markdownToHtml(md: string, assets: Record<string, string> = {}):
  */
 export function htmlToMarkdown(html: string, assets: Record<string, string> = {}): string {
   if (!html) return '';
+  currentAssetsMap = assets || {};
   const processedHtml = restoreAssetUrls(html, assets);
 
   try {
-    return turndownService.turndown(processedHtml).trim();
+    const md = turndownService.turndown(processedHtml).trim();
+    currentAssetsMap = {};
+    return md;
   } catch (err) {
+    currentAssetsMap = {};
     console.error('Failed to convert html to markdown:', err);
     return html;
   }

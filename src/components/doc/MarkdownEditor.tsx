@@ -8,8 +8,8 @@
  * @desc 블로그/노션 스타일 위지윅(비주얼) 편집과 표준 마크다운 원본 편집을 모두 지원하는 하이브리드 에디터
  * @next src/components/doc/MarkdownViewer.tsx
  */
-import React, { useState, useEffect, useRef } from 'react';
-import { Save } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Save, Trash2, Plus } from 'lucide-react';
 import { MarkdownViewer } from './MarkdownViewer';
 import { VisualTableEditor } from './VisualTableEditor';
 import { EditorToolbar } from './EditorToolbar';
@@ -40,6 +40,14 @@ export const MarkdownEditor: React.FC<Props> = ({
   const [isSaved, setIsSaved] = useState(true);
   const [showTableModal, setShowTableModal] = useState(false);
 
+  interface ActiveBlockInfo {
+    type: 'image' | 'table' | 'callout';
+    element: HTMLElement;
+    top: number;
+    left: number;
+  }
+  const [activeBlock, setActiveBlock] = useState<ActiveBlockInfo | null>(null);
+
   const visualEditorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -47,6 +55,51 @@ export const MarkdownEditor: React.FC<Props> = ({
   const hasInitializedRef = useRef(false);
 
   const onSaveRef = useRef(onSave);
+  const localAssetsRef = useRef<Record<string, string>>({ ...assets });
+  useEffect(() => {
+    localAssetsRef.current = { ...localAssetsRef.current, ...assets };
+  }, [assets]);
+
+  // 블록 액션 툴바 위치 계산
+  const updateActiveBlockPos = useCallback((el: HTMLElement, type: 'image' | 'table' | 'callout') => {
+    const rect = el.getBoundingClientRect();
+    const toolbarWidth = type === 'table' ? 240 : 120;
+    const toolbarHeight = 36;
+
+    // 수평: 요소 우측 상단 정렬 (화면 안전 마진 10px)
+    const idealLeft = rect.right - toolbarWidth;
+    const clampedLeft = Math.max(10, Math.min(window.innerWidth - toolbarWidth - 10, idealLeft));
+
+    // 수직: 요소 바로 위 (공간 부족 시 요소 바로 아래)
+    let idealTop = rect.top - toolbarHeight - 6;
+    if (idealTop < 8) {
+      idealTop = rect.bottom + 6;
+    }
+    const clampedTop = Math.max(8, Math.min(window.innerHeight - toolbarHeight - 8, idealTop));
+
+    setActiveBlock({
+      type,
+      element: el,
+      top: clampedTop,
+      left: clampedLeft,
+    });
+  }, []);
+
+  // 스크롤 시 블록 위치 동기화
+  useEffect(() => {
+    const handleScroll = () => {
+      if (activeBlock) {
+        if (!document.body.contains(activeBlock.element)) {
+          setActiveBlock(null);
+        } else {
+          updateActiveBlockPos(activeBlock.element, activeBlock.type);
+        }
+      }
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [activeBlock, updateActiveBlockPos]);
+
   useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
@@ -54,10 +107,10 @@ export const MarkdownEditor: React.FC<Props> = ({
   // Initialize visual editor with rendered HTML on first mount or reset
   useEffect(() => {
     if (visualEditorRef.current && mode === 'visual' && !hasInitializedRef.current) {
-      visualEditorRef.current.innerHTML = markdownToHtml(initialContent, assets);
+      visualEditorRef.current.innerHTML = markdownToHtml(initialContent, localAssetsRef.current);
       hasInitializedRef.current = true;
     }
-  }, [mode, initialContent, assets]);
+  }, [mode, initialContent]);
 
   // Debounced auto-save (1.5 seconds)
   useEffect(() => {
@@ -76,7 +129,7 @@ export const MarkdownEditor: React.FC<Props> = ({
     if (!visualEditorRef.current) return;
     isInternalUpdateRef.current = true;
     const html = visualEditorRef.current.innerHTML;
-    const md = htmlToMarkdown(html, assets);
+    const md = htmlToMarkdown(html, localAssetsRef.current);
     setMarkdownText(md);
     setIsSaved(false);
     setTimeout(() => {
@@ -84,17 +137,34 @@ export const MarkdownEditor: React.FC<Props> = ({
     }, 50);
   };
 
+  // Backspace / Delete 키로 선택된 이미지나 블록 즉각 삭제
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (!activeBlock) return;
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        if (activeBlock.type === 'image') {
+          e.preventDefault();
+          activeBlock.element.remove();
+          setActiveBlock(null);
+          syncVisualToMarkdown();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [activeBlock]);
+
   // Switch between Visual (Blog) and Markdown (Code) modes
   const handleToggleMode = (targetMode: 'visual' | 'markdown') => {
     if (targetMode === mode) return;
 
     if (targetMode === 'visual') {
       if (visualEditorRef.current) {
-        visualEditorRef.current.innerHTML = markdownToHtml(markdownText, assets);
+        visualEditorRef.current.innerHTML = markdownToHtml(markdownText, localAssetsRef.current);
       }
     } else {
       if (visualEditorRef.current) {
-        const md = htmlToMarkdown(visualEditorRef.current.innerHTML, assets);
+        const md = htmlToMarkdown(visualEditorRef.current.innerHTML, localAssetsRef.current);
         setMarkdownText(md);
       }
     }
@@ -246,8 +316,9 @@ export const MarkdownEditor: React.FC<Props> = ({
 
     const assetUrl = await onUploadAsset(file);
     if (assetUrl) {
+      localAssetsRef.current[file.name] = assetUrl;
       if (mode === 'visual') {
-        const imgHtml = `<p><img src="${assetUrl}" alt="${file.name}" class="rounded-xl shadow-md my-4 max-w-full" /></p><p><br></p>`;
+        const imgHtml = `<p><img src="${assetUrl}" data-asset-name="${file.name}" alt="${file.name}" class="rounded-xl shadow-md my-4 max-w-full" /></p><p><br></p>`;
         document.execCommand('insertHTML', false, imgHtml);
         syncVisualToMarkdown();
       } else {
@@ -257,8 +328,103 @@ export const MarkdownEditor: React.FC<Props> = ({
     e.target.value = '';
   };
 
+  const handleDeleteImage = () => {
+    if (!activeBlock || activeBlock.type !== 'image') return;
+    activeBlock.element.remove();
+    setActiveBlock(null);
+    syncVisualToMarkdown();
+  };
+
+  const handleAddTableRow = () => {
+    if (!activeBlock || activeBlock.type !== 'table') return;
+    const table = activeBlock.element as HTMLTableElement;
+    const rows = table.querySelectorAll('tr');
+    if (rows.length === 0) return;
+    const colCount = rows[0].children.length;
+    const newRow = document.createElement('tr');
+    for (let i = 0; i < colCount; i++) {
+      const td = document.createElement('td');
+      td.innerHTML = '<br>';
+      newRow.appendChild(td);
+    }
+    const tbody = table.querySelector('tbody') || table;
+    tbody.appendChild(newRow);
+    syncVisualToMarkdown();
+    updateActiveBlockPos(table, 'table');
+  };
+
+  const handleAddTableColumn = () => {
+    if (!activeBlock || activeBlock.type !== 'table') return;
+    const table = activeBlock.element as HTMLTableElement;
+    const rows = table.querySelectorAll('tr');
+    rows.forEach((row, idx) => {
+      if (idx === 0 && row.querySelector('th')) {
+        const th = document.createElement('th');
+        th.innerText = '새 열';
+        row.appendChild(th);
+      } else {
+        const td = document.createElement('td');
+        td.innerHTML = '<br>';
+        row.appendChild(td);
+      }
+    });
+    syncVisualToMarkdown();
+    updateActiveBlockPos(table, 'table');
+  };
+
+  const handleDeleteTable = () => {
+    if (!activeBlock || activeBlock.type !== 'table') return;
+    activeBlock.element.remove();
+    setActiveBlock(null);
+    syncVisualToMarkdown();
+  };
+
+  const handleDeleteCallout = () => {
+    if (!activeBlock || activeBlock.type !== 'callout') return;
+    activeBlock.element.remove();
+    setActiveBlock(null);
+    syncVisualToMarkdown();
+  };
+
   const handleVisualClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
+
+    // 0. 이미지 선택 감지
+    if (target.tagName === 'IMG') {
+      e.stopPropagation();
+      visualEditorRef.current?.querySelectorAll('img').forEach((img) => {
+        img.classList.remove('ring-4', 'ring-blue-500', 'ring-offset-2');
+      });
+      target.classList.add('ring-4', 'ring-blue-500', 'ring-offset-2');
+      updateActiveBlockPos(target, 'image');
+      return;
+    }
+
+    // 0-1. 표 선택 감지 (TD, TH, TABLE)
+    const tableEl = target.closest('table');
+    if (tableEl) {
+      visualEditorRef.current?.querySelectorAll('img').forEach((img) => {
+        img.classList.remove('ring-4', 'ring-blue-500', 'ring-offset-2');
+      });
+      updateActiveBlockPos(tableEl, 'table');
+      return;
+    }
+
+    // 0-2. 콜아웃 선택 감지 (BLOCKQUOTE)
+    const blockquoteEl = target.closest('blockquote');
+    if (blockquoteEl) {
+      visualEditorRef.current?.querySelectorAll('img').forEach((img) => {
+        img.classList.remove('ring-4', 'ring-blue-500', 'ring-offset-2');
+      });
+      updateActiveBlockPos(blockquoteEl, 'callout');
+      return;
+    }
+
+    // 일반 텍스트나 다른 곳 클릭 시 이미지 선택 링 및 액션 메뉴 해제
+    visualEditorRef.current?.querySelectorAll('img').forEach((img) => {
+      img.classList.remove('ring-4', 'ring-blue-500', 'ring-offset-2');
+    });
+    setActiveBlock(null);
 
     // 1. Checkbox toggle
     if (target && target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'checkbox') {
@@ -460,7 +626,7 @@ export const MarkdownEditor: React.FC<Props> = ({
 
   const handleQuickSave = () => {
     if (mode === 'visual' && visualEditorRef.current) {
-      const finalMd = htmlToMarkdown(visualEditorRef.current.innerHTML, assets);
+      const finalMd = htmlToMarkdown(visualEditorRef.current.innerHTML, localAssetsRef.current);
       onSave(finalMd);
       setMarkdownText(finalMd);
     } else {
@@ -471,7 +637,7 @@ export const MarkdownEditor: React.FC<Props> = ({
 
   const handleSaveAndClose = () => {
     if (mode === 'visual' && visualEditorRef.current) {
-      const finalMd = htmlToMarkdown(visualEditorRef.current.innerHTML, assets);
+      const finalMd = htmlToMarkdown(visualEditorRef.current.innerHTML, localAssetsRef.current);
       onSave(finalMd);
     } else {
       onSave(markdownText);
@@ -610,6 +776,86 @@ export const MarkdownEditor: React.FC<Props> = ({
         onInsertInlineSandbox={handleInsertInlineSandbox}
         onTriggerImageUpload={() => fileInputRef.current?.click()}
       />
+
+      {/* 🎯 플로팅 블록 액션 바: 이미지, 표, 콜아웃 클릭 시 즉시 노출되는 삭제/조작 툴팁 */}
+      {activeBlock && mode === 'visual' && (
+        <div
+          style={{ top: `${activeBlock.top}px`, left: `${activeBlock.left}px` }}
+          className="fixed z-50 bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md text-white rounded-xl p-1 border border-slate-700 shadow-2xl flex items-center gap-1 animate-in fade-in zoom-in-95 duration-100 select-none text-xs"
+        >
+          {activeBlock.type === 'image' && (
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleDeleteImage();
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white font-semibold transition active:scale-95 shadow-xs"
+              title="이 이미지 삭제 (Backspace 키로도 삭제 가능)"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>이미지 삭제</span>
+            </button>
+          )}
+
+          {activeBlock.type === 'table' && (
+            <>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleAddTableRow();
+                }}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-800 text-slate-200 transition"
+                title="표 아래에 새 행 추가"
+              >
+                <Plus className="w-3 h-3 text-blue-400" />
+                <span>행 추가</span>
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleAddTableColumn();
+                }}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-800 text-slate-200 transition"
+                title="표 우측에 새 열 추가"
+              >
+                <Plus className="w-3 h-3 text-emerald-400" />
+                <span>열 추가</span>
+              </button>
+              <div className="w-px h-3.5 bg-slate-700 mx-0.5" />
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleDeleteTable();
+                }}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-950/60 text-red-400 hover:text-red-300 font-semibold transition"
+                title="표 전체 삭제"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>표 삭제</span>
+              </button>
+            </>
+          )}
+
+          {activeBlock.type === 'callout' && (
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleDeleteCallout();
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white font-semibold transition active:scale-95 shadow-xs"
+              title="콜아웃 박스 삭제"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>콜아웃 삭제</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
