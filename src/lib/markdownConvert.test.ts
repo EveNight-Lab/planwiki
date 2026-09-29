@@ -109,5 +109,39 @@ describe('markdownConvert 인라인 프로토타입 위젯 변환 테스트', ()
     expect(restoredMd).not.toContain('blob:');
     expect(restoredMd).toContain('![chart.png](assets/chart.png)');
   });
+
+  it('이미지 바로 뒤에 표가 올 때 HTML -> Markdown -> HTML 왕복 시 표와 이미지가 모두 정상 유지된다', () => {
+    const assets = {
+      'test.png': 'blob:http://localhost:5173/test-1234',
+    };
+    const inputHtml = `<p><img src="blob:http://localhost:5173/test-1234" data-asset-name="test.png" alt="테스트 이미지" /></p><table><thead><tr><th>항목</th><th>설명</th></tr></thead><tbody><tr><td>A</td><td>내용</td></tr></tbody></table>`;
+    const md = htmlToMarkdown(inputHtml, assets);
+    const roundtripHtml = markdownToHtml(md, assets);
+    expect(roundtripHtml).toContain('<table');
+    expect(roundtripHtml).toContain('<img');
+    expect(roundtripHtml).not.toContain('| 항목 |'); // 표가 텍스트로 깨지지 않아야 함
+  });
+
+  it('대용량 Base64 Data URL(가상 프로젝트 모드)이 포함되어도 정규식 에러 없이 안전하게 파싱 및 복원된다', () => {
+    // 50KB 길이의 가상 Base64 문자열
+    const largeBase64 = 'data:image/png;base64,' + 'A'.repeat(50000);
+    const assets = {
+      'heavy-screenshot.png': largeBase64,
+    };
+
+    const inputMd = `### 요구사항 분석\n\n![대용량 스크린샷](assets/heavy-screenshot.png)\n\n| 항목 | 상태 |\n| --- | --- |\n| 기능1 | 완료 |`;
+
+    // 1. Markdown -> HTML (catch 에러로 떨어지지 않고 정상 HTML 구조를 유지해야 함)
+    const html = markdownToHtml(inputMd, assets);
+    expect(html).toContain('<table');
+    expect(html).toContain('data-asset-name="heavy-screenshot.png"');
+    expect(html).not.toBe(`<p>${inputMd}</p>`); // 에러로 인해 전체가 날것의 <p>로 전락하지 않았음을 검증
+
+    // 2. HTML -> Markdown (저장 시점)
+    const restoredMd = htmlToMarkdown(html, assets);
+    expect(restoredMd).toContain('assets/heavy-screenshot.png');
+    expect(restoredMd).toContain('| 항목 | 상태 |');
+  });
 });
+
 

@@ -8,7 +8,7 @@
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
-import { replaceAssetUrls, restoreAssetUrls, escapeRegExp } from './assetHelper';
+import { replaceAssetUrls, restoreAssetUrls } from './assetHelper';
 
 const turndownService = new TurndownService({
   headingStyle: 'atx',
@@ -49,7 +49,7 @@ turndownService.addRule('prototypeWidget', {
 // Module-level context for assets map during Turndown serialization
 let currentAssetsMap: Record<string, string> = {};
 
-// Custom rule for image assets restoration (Turndown의 제멋대로 이스케이프 방지 및 assets/파일명 일원화)
+// Custom rule for image assets restoration (Turndown의 제멋대로 이스케이프 방지 및 독립 블록 줄바꿈 보장)
 turndownService.addRule('imageAsset', {
   filter: 'img',
   replacement: (_, node) => {
@@ -58,42 +58,58 @@ turndownService.addRule('imageAsset', {
     const alt = el.getAttribute('alt') || '';
     const dataAssetName = el.getAttribute('data-asset-name');
 
+    let finalPath = '';
+
     // 1. data-asset-name 속성이 있으면 최우선으로 원본 파일명 보존
     if (dataAssetName) {
-      return `![${alt}](assets/${dataAssetName})`;
-    }
-
-    // 2. 현재 전달된 assets 맵에서 src (Blob URL, Data URL 등)와 일치하는 filename 역조회
-    for (const [filename, url] of Object.entries(currentAssetsMap)) {
-      if (!filename || !url) continue;
-      if (src === url || src.endsWith(url)) {
-        return `![${alt}](assets/${filename})`;
-      }
-    }
-
-    // 3. src에 이미 assets/ 가 포함된 경우 (예: assets/my-image.png 또는 http://.../assets/my-image.png)
-    if (src.includes('assets/')) {
-      const match = src.match(/(?:^|\/)assets\/(.+)$/);
-      if (match) {
-        let cleanName = match[1];
-        // 앞뒤 < > 또는 URL 디코딩 정돈
-        cleanName = cleanName.replace(/^[<]+|[>]+$/g, '');
-        try {
-          cleanName = decodeURIComponent(cleanName);
-        } catch {
-          // ignore
+      finalPath = `assets/${dataAssetName}`;
+    } else {
+      // 2. 현재 전달된 assets 맵에서 src (Blob URL, Data URL 등)와 일치하는 filename 역조회
+      for (const [filename, url] of Object.entries(currentAssetsMap)) {
+        if (!filename || !url) continue;
+        if (src === url || src.endsWith(url)) {
+          finalPath = `assets/${filename}`;
+          break;
         }
-        return `![${alt}](assets/${cleanName})`;
+      }
+
+      // 3. src에 이미 assets/ 가 포함된 경우 (예: assets/my-image.png 또는 http://.../assets/my-image.png)
+      if (!finalPath && src.includes('assets/')) {
+        const match = src.match(/(?:^|\/)assets\/(.+)$/);
+        if (match) {
+          let cleanName = match[1];
+          cleanName = cleanName.replace(/^[<]+|[>]+$/g, '');
+          try {
+            cleanName = decodeURIComponent(cleanName);
+          } catch {
+            // ignore
+          }
+          finalPath = `assets/${cleanName}`;
+        }
+      }
+
+      // 4. assets 맵에서 alt 텍스트와 일치하는 키가 있는 경우
+      if (!finalPath && alt && currentAssetsMap[alt]) {
+        finalPath = `assets/${alt}`;
+      }
+
+      // 5. 일반 외부 URL 이미지
+      if (!finalPath) {
+        finalPath = src;
       }
     }
 
-    // 4. assets 맵에서 alt 텍스트와 일치하는 키가 있는 경우
-    if (alt && currentAssetsMap[alt]) {
-      return `![${alt}](assets/${alt})`;
-    }
+    if (!finalPath) return '';
+    // 반드시 앞뒤 2줄 바꿈(\n\n)을 보장하여 표나 문단과 절대 겹치지 않게 완벽 격리
+    return `\n\n![${alt}](${finalPath})\n\n`;
+  },
+});
 
-    // 5. 일반 외부 URL 이미지
-    return src ? `![${alt}](${src})` : '';
+// Custom rule for table block: 표 앞뒤에 빈 줄을 엄격히 보장하여 파서 오작동 방지
+turndownService.addRule('tableIsolation', {
+  filter: 'table',
+  replacement: (content) => {
+    return `\n\n${content.trim()}\n\n`;
   },
 });
 
@@ -219,16 +235,22 @@ export function markdownToHtml(md: string, assets: Record<string, string> = {}):
       return `<input type="checkbox" data-task-index="${idx}" class="task-checkbox cursor-pointer w-4 h-4 rounded accent-blue-600 align-middle mr-1.5 transition-transform active:scale-90" ${cleaned.slice(6)}`;
     });
 
-    // 3. 에셋 매핑된 이미지들에 data-asset-name 속성 자동 부여하여 에디터 재저장 시 양방향 100% 무손실 보존
-    for (const [filename, url] of Object.entries(assets)) {
-      if (!filename || !url) continue;
-      const escapedUrl = escapeRegExp(url);
-      const imgRegex = new RegExp(`(<img\\s+[^>]*?src=["']${escapedUrl}["'][^>]*?)>`, 'gi');
-      rawHtml = rawHtml.replace(imgRegex, (m, prefix) => {
-        if (prefix.includes('data-asset-name=')) return m;
-        return `${prefix} data-asset-name="${filename}">`;
-      });
-    }
+    // 3. 에셋 매핑된 이미지들에 data-asset-name 속성 안전 부여 (대용량 URL 정규식 컴파일 원천 배제)
+    rawHtml = rawHtml.replace(/<img\s+([^>]*?)src=["']([^"']+)["']([^>]*?)>/gi, (m, before, srcVal, after) => {
+      if (m.includes('data-asset-name=')) return m;
+      let matchedFilename = '';
+      for (const [filename, url] of Object.entries(assets)) {
+        if (!filename || !url) continue;
+        if (srcVal === url || srcVal.endsWith(url)) {
+          matchedFilename = filename;
+          break;
+        }
+      }
+      if (matchedFilename) {
+        return `<img ${before}src="${srcVal}" data-asset-name="${matchedFilename}"${after}>`;
+      }
+      return m;
+    });
 
     return rawHtml;
   } catch (err) {

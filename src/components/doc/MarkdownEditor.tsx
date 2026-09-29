@@ -154,6 +154,28 @@ export const MarkdownEditor: React.FC<Props> = ({
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [activeBlock]);
 
+  // 비주얼 모드에서 마크다운 구조체(표 셀 뼈대 등)가 타이핑 중 실수로 깨지는 현상 원천 방어
+  const handleVisualKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Backspace') {
+      const sel = window.getSelection();
+      if (!sel || !sel.anchorNode) return;
+      const anchorElement =
+        sel.anchorNode.nodeType === Node.ELEMENT_NODE
+          ? (sel.anchorNode as HTMLElement)
+          : sel.anchorNode.parentElement;
+
+      // 1. 표(TD/TH) 셀 내부에서 빈 셀인데 백스페이스를 눌러 셀 자체가 파괴되거나 합쳐지는 것을 방어
+      const cell = anchorElement?.closest('td, th');
+      if (cell) {
+        const text = cell.textContent || '';
+        if (text.trim() === '' && sel.isCollapsed) {
+          e.preventDefault();
+          return;
+        }
+      }
+    }
+  };
+
   // Switch between Visual (Blog) and Markdown (Code) modes
   const handleToggleMode = (targetMode: 'visual' | 'markdown') => {
     if (targetMode === mode) return;
@@ -690,6 +712,7 @@ export const MarkdownEditor: React.FC<Props> = ({
               syncVisualToMarkdown();
             }}
             onClick={handleVisualClick}
+            onKeyDown={handleVisualKeyDown}
             className="prose prose-slate dark:prose-invert max-w-none text-slate-800 dark:text-slate-100 outline-none
               [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-slate-900 dark:[&_h1]:text-white [&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:pb-2 [&_h1]:border-b [&_h1]:border-slate-200 dark:[&_h1]:border-slate-800
               [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-900 dark:[&_h2]:text-white [&_h2]:mt-5 [&_h2]:mb-2.5
