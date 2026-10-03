@@ -1,19 +1,20 @@
 /**
  * @domain 기획 문서 작업
- * @feature 목차 탐색 & 접이식 본문
- * @phase 입력
- * @trigger 사용자가 상단 목차 번호(1., 1.1.) 클릭
- * @target 목차 항목 선택 기능
- * @desc 원하는 목차를 누르면 해당 위치로 스크롤되고 접혀있던 본문이 자동으로 펼쳐짐
- * @next src/components/doc/FocusBreadcrumb.tsx
+ * @feature 목차 단락 삭제
+ * @phase 입력 (Trigger)
+ * @trigger 사용자가 상단 목차 번호 클릭 또는 단락 삭제 버튼 클릭
+ * @target 목차 항목 탐색 및 단락 삭제 기능
+ * @desc 원하는 목차를 누르면 해당 위치로 스크롤되고, 우측 끄트머리 삭제 버튼 클릭 시 확인 후 단락 제거
+ * @next src/pages/WorkspaceView.tsx
  */
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, ListTree } from 'lucide-react';
+import { ChevronDown, ChevronUp, ListTree, Trash2 } from 'lucide-react';
 import type { DocNode } from '../../types/workspace';
 
 interface Props {
   rootNode: DocNode;
   onSelectSection: (id: string) => void;
+  onDeleteSection?: (id: string) => void;
 }
 
 interface TocItem {
@@ -24,7 +25,11 @@ interface TocItem {
   hasPreview: boolean;
 }
 
-export const TableOfContents: React.FC<Props> = ({ rootNode, onSelectSection }) => {
+export const TableOfContents: React.FC<Props> = ({
+  rootNode,
+  onSelectSection,
+  onDeleteSection,
+}) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Flatten tree into numbered TOC items
@@ -90,7 +95,7 @@ export const TableOfContents: React.FC<Props> = ({ rootNode, onSelectSection }) 
             <li
               key={item.id}
               style={{ paddingLeft: `${(item.depth - 1) * 14}px` }}
-              className="group flex items-center gap-1.5 sm:gap-2 py-1 sm:py-0.5 min-h-[32px] sm:min-h-[28px]"
+              className="group flex items-center justify-between gap-1.5 sm:gap-2 py-1 sm:py-0.5 min-h-[32px] sm:min-h-[28px] rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-800/50 px-1.5 -mx-1.5 transition-colors"
             >
               <button
                 type="button"
@@ -100,12 +105,73 @@ export const TableOfContents: React.FC<Props> = ({ rootNode, onSelectSection }) 
                 <span className="font-mono text-xs text-slate-500 dark:text-slate-400 font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 shrink-0">
                   {item.numbering}.
                 </span>
-                <span className="font-medium break-keep leading-snug">{item.title}</span>
+                <span className="font-medium break-keep leading-snug truncate">{item.title}</span>
               </button>
+
+              {onDeleteSection && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`'${item.title}' 항목과 모든 하위 내용을 삭제하시겠습니까?`)) {
+                      onDeleteSection(item.id);
+                    }
+                  }}
+                  title="단락 삭제"
+                  aria-label={`${item.title} 단락 삭제`}
+                  className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 opacity-70 sm:opacity-0 group-hover:opacity-100 transition-all shrink-0 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
     </div>
   );
+};
+
+// Preview props for Dev-Admin Board
+(TableOfContents as unknown as { _previewProps: Props })._previewProps = {
+  rootNode: {
+    id: 'root-demo',
+    name: '루트 문서',
+    path: '/',
+    content: '',
+    assets: {},
+    meta: { title: '루트 문서', order: 0 },
+    children: [
+      {
+        id: 'sec-1',
+        name: '개요',
+        path: '/sec-1',
+        content: '',
+        assets: {},
+        meta: { title: '프로젝트 개요', order: 1 },
+        children: [
+          {
+            id: 'sec-1-1',
+            name: '목표',
+            path: '/sec-1/sec-1-1',
+            content: '',
+            assets: {},
+            meta: { title: '핵심 목표', order: 1 },
+            children: [],
+          },
+        ],
+      },
+      {
+        id: 'sec-2',
+        name: '규격',
+        path: '/sec-2',
+        content: '',
+        assets: {},
+        meta: { title: '상세 규격', order: 2 },
+        children: [],
+      },
+    ],
+  },
+  onSelectSection: () => {},
+  onDeleteSection: () => {},
 };

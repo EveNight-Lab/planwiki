@@ -948,6 +948,7 @@ export const WorkspaceView: React.FC = () => {
           <TableOfContents
             rootNode={displayNode}
             onSelectSection={handleSelectSection}
+            onDeleteSection={handleDeleteNode}
           />
         </div>
 
