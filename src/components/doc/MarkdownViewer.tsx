@@ -9,6 +9,7 @@ import React, { useMemo } from 'react';
 import { marked } from 'marked';
 import { splitMarkdownIntoSegments, joinSegmentsToMarkdown, type ContentSegment } from '../../lib/markdownSegments';
 import { replaceAssetUrls } from '../../lib/assetHelper';
+import { sanitizeMarkdownHtml } from '../../lib/sanitizeHelper';
 import { InlineSandbox } from '../sandbox/InlineSandbox';
 
 interface Props {
@@ -45,13 +46,16 @@ function renderMarkdownHtml(mdText: string, assets: Record<string, string>): str
 
     // Make task list checkboxes interactive
     let taskIdx = 0;
-    return rawHtml.replace(/<input\s+([^>]*?)type=["']checkbox["']([^>]*?)>/gi, (match) => {
+    const taskHtml = rawHtml.replace(/<input\s+([^>]*?)type=["']checkbox["']([^>]*?)>/gi, (match) => {
       const idx = taskIdx++;
       const cleaned = match
         .replace(/\s*disabled(?:=["'][^"']*["'])?/gi, '')
         .replace(/class=["'][^"']*["']/gi, '');
       return `<input type="checkbox" data-task-index="${idx}" class="task-checkbox cursor-pointer w-4 h-4 rounded accent-indigo-600 align-middle mr-1.5 transition-transform active:scale-90" ${cleaned.slice(6)}`;
     });
+
+    // 일반 마크다운 영역의 전역 스타일 오염 및 fixed 가림막 원천 살균
+    return sanitizeMarkdownHtml(taskHtml);
   } catch (err) {
     console.error('Markdown parse error:', err);
     return `<pre class="text-red-400">${mdText}</pre>`;

@@ -77,4 +77,26 @@ describe('markdownSegments 단위 테스트', () => {
     expect(joined).toContain('```html:preview\n<div class="box">버튼</div>\n```');
     expect(joined).toContain('하단 설명');
   });
+
+  it('닫는 백틱(```)이 누락된 미종료 코드 블록도 안전하게 격리 캡슐화한다', () => {
+    const md = `### 상단
+\`\`\`html:preview
+<div class="unclosed">닫히지 않은 코드</div>
+
+### 다음 섹션
+정상적인 본문 내용입니다.`;
+
+    const segments = splitMarkdownIntoSegments(md);
+    expect(segments.length).toBe(3);
+    expect(segments[0].type).toBe('markdown');
+    expect(segments[1].type).toBe('html_preview');
+    if (segments[1].type === 'html_preview') {
+      expect(segments[1].html).toContain('<div class="unclosed">닫히지 않은 코드</div>');
+    }
+    expect(segments[2].type).toBe('markdown');
+    if (segments[2].type === 'markdown') {
+      expect(segments[2].content).toContain('다음 섹션');
+    }
+  });
 });
+

@@ -23,8 +23,9 @@ export type ContentSegment = MarkdownTextSegment | InlineHtmlSegment;
 /**
  * 인라인 HTML 샌드박스 코드 블록 정규식
  * 지원 문법: ```html:preview, ```html:interactive, ```html:sandbox
+ * 닫는 백틱이 누락된 경우에도 다음 마크다운 헤더(#) 또는 문서 끝까지를 안전하게 프로토타입 블록으로 캡슐화
  */
-const INLINE_SANDBOX_REGEX = /```(?:html:preview|html:interactive|html:sandbox)\s*([\s\S]*?)```/gi;
+const INLINE_SANDBOX_REGEX = /```(?:html:preview|html:interactive|html:sandbox)\s*([\s\S]*?)(?:```|(?=\n#{1,6}\s)|$)/gi;
 
 /**
  * 마크다운 본문을 일반 텍스트 세그먼트와 인라인 HTML 샌드박스 세그먼트로 순서대로 분할

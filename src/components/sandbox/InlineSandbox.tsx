@@ -19,6 +19,8 @@ import {
   ExternalLink,
   Maximize2,
   Minimize2,
+  Play,
+  Lock,
 } from 'lucide-react';
 
 interface Props {
@@ -46,6 +48,7 @@ export const InlineSandbox: React.FC<Props> = ({
   const [showConsole, setShowConsole] = useState(false);
   const [viewportMode, setViewportMode] = useState<'desktop' | 'mobile'>('desktop');
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isInteracting, setIsInteracting] = useState(false);
   const [logs, setLogs] = useState<ConsoleLog[]>([]);
   const [editableCode, setEditableCode] = useState(htmlCode);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -138,10 +141,16 @@ export const InlineSandbox: React.FC<Props> = ({
 
     const codeToInject = editableCode || htmlCode;
     const viewportMeta = codeToInject.includes('name="viewport"') || codeToInject.includes("name='viewport'")
-      ? ''
-      : '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
+    const isolationStyles = `
+      <style>
+        /* PlanCraft 이중 격리 기본 스타일: 연쇄 스크롤 방지 및 독립 뷰포트 확보 */
+        html, body {
+          overscroll-behavior: contain;
+        }
+      </style>
+    `;
 
-    const injection = `${viewportMeta}${interceptor}`;
+    const injection = `${viewportMeta}${interceptor}${isolationStyles}`;
     if (codeToInject.includes('<head>')) {
       return codeToInject.replace('<head>', `<head>${injection}`);
     }
@@ -198,6 +207,32 @@ export const InlineSandbox: React.FC<Props> = ({
               <Smartphone className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* 터치 스크롤 보호 / 프로토타입 조작 모드 토글 */}
+          {!isFullScreen && (
+            <button
+              type="button"
+              onClick={() => setIsInteracting(!isInteracting)}
+              title={isInteracting ? '스크롤 보호 모드로 전환 (문서 스크롤 우선)' : '프로토타입 조작 모드 활성화'}
+              className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition ${
+                isInteracting
+                  ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-500/20'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+              }`}
+            >
+              {isInteracting ? (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span className="hidden sm:inline">조작 중</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">스크롤 보호</span>
+                </>
+              )}
+            </button>
+          )}
 
           {/* 2) Console toggle */}
           <button
@@ -362,7 +397,7 @@ export const InlineSandbox: React.FC<Props> = ({
         }`}
       >
         <div
-          className={`w-full transition-all duration-300 bg-white dark:bg-slate-950 overflow-hidden ${
+          className={`relative w-full transition-all duration-300 bg-white dark:bg-slate-950 overflow-hidden ${
             viewportMode === 'mobile'
               ? 'max-w-[375px] rounded-[36px] border-[6px] border-slate-800 shadow-2xl ring-1 ring-slate-700/50'
               : 'max-w-full rounded-xl border border-slate-800 shadow-inner'
@@ -375,6 +410,24 @@ export const InlineSandbox: React.FC<Props> = ({
               <div className="w-2 h-2 rounded-full bg-slate-700" />
             </div>
           )}
+
+          {/* 터치 스크롤 보호 가드 오버레이 (조작 비활성화 상태) */}
+          {!isInteracting && !isFullScreen && (
+            <div
+              onClick={() => setIsInteracting(true)}
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/25 backdrop-blur-[1px] hover:bg-slate-950/15 transition-all cursor-pointer select-none group"
+              title="탭하여 프로토타입 조작 활성화 (터치 스크롤 방해 방지)"
+            >
+              <div className="px-4 py-2 rounded-full bg-slate-900/90 text-white text-xs font-semibold shadow-xl border border-slate-700/80 flex items-center gap-2 group-hover:scale-105 group-hover:bg-blue-600 transition-all">
+                <Play className="w-3.5 h-3.5 text-emerald-400 group-hover:text-white" />
+                <span>터치하여 조작 시작</span>
+              </div>
+              <span className="text-[11px] text-slate-300 mt-2 font-medium drop-shadow hidden xs:inline">
+                스크롤할 때는 그냥 지나치셔도 됩니다
+              </span>
+            </div>
+          )}
+
           <iframe
             key={reloadKey}
             ref={iframeRef}
@@ -382,8 +435,8 @@ export const InlineSandbox: React.FC<Props> = ({
             srcDoc={sandboxHtml}
             sandbox="allow-scripts allow-modals allow-forms"
             className={`w-full border-none block transition-all duration-300 ${
-              isFullScreen ? 'flex-1' : viewportMode === 'mobile' ? 'h-[580px]' : 'h-80'
-            }`}
+              isFullScreen ? 'flex-1 pointer-events-auto' : viewportMode === 'mobile' ? 'h-[580px]' : 'h-80'
+            } ${!isInteracting && !isFullScreen ? 'pointer-events-none' : 'pointer-events-auto'}`}
             loading="lazy"
           />
         </div>
